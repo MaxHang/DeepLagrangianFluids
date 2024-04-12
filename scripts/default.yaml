@@ -1,3 +1,4 @@
-dataset_dir: "../datasets/ours_default_data" # path to the dataset directory with 'train' and 'valid' subdirs.
+# dataset_dir: "../datasets/ours_default_data" # path to the dataset directory with 'train' and 'valid' subdirs.
+dataset_dir: "/datasets/cconv/ours_default_data" # path to the dataset directory with 'train' and 'valid' subdirs.
 train_data:
   random_rotation: true # randomly rotate training data about the gravity axis.

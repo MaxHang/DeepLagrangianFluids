@@ -14,6 +14,9 @@ from physics_data_helper import numpy_from_bgeo, write_bgeo_from_numpy
 from create_physics_scenes import obj_surface_to_particles, obj_volume_to_particles
 import open3d as o3d
 
+
+viscosity_list = [0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+
 def read_pos_vel_from_h5(path):
     """Load h5py data files from specified path."""
     hf = h5py.File(path, 'r')
@@ -47,14 +50,8 @@ def write_particles(path_without_ext, pos, vel=None, options=None):
         write_bgeo_from_numpy(path_without_ext + '.bgeo', pos, vel)
 
 
-def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
-               options):
-
-    # init the network
-    model = trainscript_module.create_model()
-    model.init()
-    model.load_weights(weights_path, by_name=True)
-
+def run_sim_tf(trainscript_module, model, scene, num_steps, output_dir,
+               options, h5_path, _viscosity):
     # prepare static particles
     walls = []
     for x in scene['walls']:
@@ -75,16 +72,11 @@ def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
     # prepare fluids
     fluids = []
     for x in scene['fluids']:
-        if 'h5_path' in x and os.path.exists(x['h5_path']):
-            data = read_pos_vel_from_h5(x['h5_path'])
-            points, velocities = data[0], data[1]
-        else:
-            points = obj_volume_to_particles(x['path'])[0]
-            points += np.asarray([x['translation']], dtype=np.float32)
-            velocities = np.empty_like(points)
-            velocities[:, 0] = x['velocity'][0]
-            velocities[:, 1] = x['velocity'][1]
-            velocities[:, 2] = x['velocity'][2]
+        data = np.load('/datasets/cconv/ours_6k_box_data/valid_npz/sim_0201_000.npz')
+        points = data['pos']
+        velocities = np.zeros_like(points)
+        viscosity  = np.zeros(list(points.shape[:-1])+[1])
+        viscosity[:] = _viscosity
         range_ = range(x['start'], x['stop'], x['step'])
         fluids.append((points, velocities, range_))
 
@@ -107,7 +99,7 @@ def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
                 write_particles(fluid_output_path, pos.numpy(), vel.numpy(),
                                 options)
 
-            inputs = (pos, vel, None, box, box_normals)
+            inputs = (pos, vel, viscosity, box, box_normals)
             # print(
             #     pos.shape,
             #     vel.shape,
@@ -262,8 +254,19 @@ def main():
         os.makedirs(args.output)
 
     if args.weights.endswith('.h5'):
-        return run_sim_tf(trainscript_module, args.weights, scene,
-                          args.num_steps, args.output, args)
+        # init the network
+        model = trainscript_module.create_model()
+        model.init(feats_shape=(1,1))
+        model.load_weights(args.weights, by_name=True)
+        for viscosity in viscosity_list:
+            print(f'\n\n\nstart viscosity={viscosity} predict')
+            output_dir = f'/datasets/cconv/model-predit/mutil-viscosity/frame_0-VGPL_valid_3/viscosity_{viscosity}'
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            h5_path = f'/datasets/VGPL/valid/3/0.h5'
+            run_sim_tf(trainscript_module, model, scene,
+                          args.num_steps, output_dir, args, h5_path, viscosity)
+        return
     elif args.weights.endswith('.pt'):
         return run_sim_torch(trainscript_module, args.weights, scene,
                              args.num_steps, args.output, args)

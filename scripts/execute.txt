@@ -1,0 +1,40 @@
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene VGPL_scene.json \
+                 --output /datasets/cconv/model-predit/VGPL_valid_1_frame_9 \
+                 train_network_tf.py
+
+./run_network_mutil.py --weights pretrained_model_weights.h5 \
+                 --scene VGPL_scene.json \
+                 --output /datasets/cconv/model-predit/VGPL_out_v2_first_frame \
+                 train_network_tf.py
+
+./run_network_mutil_viscosity.py --weights pretrained_model_weights.h5 \
+                 --scene VGPL_scene.json \
+                 --output /datasets/cconv/model-predit/VGPL_out_v2_first_frame \
+                 train_network_tf.py
+
+./run_network_mutil_viscosity.py --weights default_model_weights.h5 \
+                 --scene VGPL_scene.json \
+                 --output /datasets/cconv/model-predit/VGPL_out_v2_first_frame \
+                 train_network_tf.py
+
+
+./evaluate_network.py --trainscript train_network_tf.py --cfg default.yaml
+
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene Box_010_scene.json \
+                 --num_steps 500 \
+                 --output /datasets/model-predicted/cconv-example/pos-cube_obj_box010_v9_obj \
+                 train_network_tf.py
+
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene test.json \
+                 --num_steps 500 \
+                 --output /datasets/model-predicted/cconv-example/test \
+                 train_network_tf.py
+
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene example_scene.json \
+                 --output /datasets/model-predicted/cconv-example/example_out \
+                 --write-ply \
+                 train_network_tf.py

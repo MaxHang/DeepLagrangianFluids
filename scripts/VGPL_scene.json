@@ -1,7 +1,7 @@
 {
     "walls":[
         {
-            "path":"../datasets/models/Box.obj",
+            "path":"/workspace/DeepLagrangianFluids/datasets/models/Box.obj",
             "translation":[
                 0,
                 0,
@@ -11,7 +11,7 @@
     ],
     "fluids":[
         {
-            "path":"../datasets/models/Fluid.obj",
+            "path":"/workspace/DeepLagrangianFluids/datasets/models/Fluid.obj",
             "velocity":[
                 0.3,
                 0,
@@ -19,12 +19,13 @@
             ],
             "translation":[
                 0,
-                3,
+                1,
                 0
             ],
             "start":0,
             "stop":1,
-            "step":1
+            "step":1,
+            "h5_path":"/datasets/VGPL/1/9.h5"
         }
     ]
 }

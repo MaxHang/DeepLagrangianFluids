@@ -17,6 +17,7 @@ _k = 1000
 
 TrainParams = namedtuple('TrainParams', ['max_iter', 'base_lr', 'batch_size'])
 train_params = TrainParams(50 * _k, 0.001, 16)
+# train_params = TrainParams(20 * _k, 0.001, 16)
 
 
 def create_model(**kwargs):
@@ -42,7 +43,9 @@ def main():
     # the train dir stores all checkpoints and summaries. The dir name is the name of this file combined with the name of the config file
     train_dir = os.path.splitext(
         os.path.basename(__file__))[0] + '_' + os.path.splitext(
-            os.path.basename(args.cfg))[0]
+            os.path.basename(args.cfg))[0] + '_v2'
+    
+    print(train_dir) # eg. train_network_tf_6kbox
 
     val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.zst')))
     train_files = sorted(
@@ -84,6 +87,8 @@ def main():
     checkpoint = tf.train.Checkpoint(step=tf.Variable(0),
                                      model=model,
                                      optimizer=optimizer)
+    checkpoint.write('aa')
+    checkpoint.save('aa')
 
     manager = MyCheckpointManager(checkpoint,
                                   trainer.checkpoint_dir,

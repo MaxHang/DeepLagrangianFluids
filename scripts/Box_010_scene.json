@@ -1,7 +1,7 @@
 {
     "walls":[
         {
-            "path":"../datasets/models/Box.obj",
+            "path":"/datasets/cconv/obj/Box_010_v9.obj",
             "translation":[
                 0,
                 0,
@@ -18,9 +18,9 @@
                 0.2
             ],
             "translation":[
-                0,
+                0.2,
                 3,
-                0
+                -0.2
             ],
             "start":0,
             "stop":1,

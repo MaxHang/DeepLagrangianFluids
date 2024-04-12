@@ -1,6 +1,6 @@
 """Config file that stores the paths to the SPlisHSPlasH binaries """
 # Set this variable to the path of the DynamicBoundarySimulator binary
-SIMULATOR_BIN = None
+SIMULATOR_BIN = "/workspace/SPlisHSPlasH-2.4.0/bin/DynamicBoundarySimulator"
 
 if SIMULATOR_BIN is None:
     raise ValueError(

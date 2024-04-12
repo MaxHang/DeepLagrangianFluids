@@ -76,6 +76,18 @@ The pretrained network weights are in ```scripts/pretrained_model_weights.h5``` 
 The following code runs the network on the example scene
 ```bash
 cd scripts
+# test
+# with TensorFlow
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene example_scene.json \
+                 --output /datasets/cconv/model-predit/example_out \
+                 --write-ply \
+                 train_network_tf.py
+# with TensorFlow
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene VGPL_scene.json \
+                 --output /datasets/cconv/model-predit/VGPL_out_v2_first_frame \
+                 train_network_tf.py
 # with TensorFlow
 ./run_network.py --weights pretrained_model_weights.h5 \
                  --scene example_scene.json \

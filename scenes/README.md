@@ -9,6 +9,14 @@ The following instructions show how to create the canyon scene.
 cd scenes
 
 # Run the simulation with the pretrained network
+# test 
+# with TensorFlow
+../scripts/run_network.py --weights ../scripts/pretrained_model_weights.h5 \
+                          --scene canyon_scene.json \
+                          --output /datasets/cconv/model-predit/canyon_out \
+                          --num_steps 1500 \
+                          --write-ply \
+                          ../scripts/train_network_tf.py
 # with TensorFlow
 ../scripts/run_network.py --weights ../scripts/pretrained_model_weights.h5 \
                           --scene canyon_scene.json \

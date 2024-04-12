@@ -27,7 +27,14 @@ def read_pos_vel_from_h5(path):
         d[..., [1,2]] = d[..., [2,1]]
     hf.close()
     return data
-    pass 
+
+def read_pos_vel_from_cconv_h5(path):
+    """Load h5py data files from specified path."""
+    hf = h5py.File(path, 'r')
+    pos = np.array(hf.get('positions'))
+    vel = np.array(hf.get('velocities'))
+    hf.close()
+    return pos[0], vel[0]
 
 
 def write_particles(path_without_ext, pos, vel=None, options=None):
@@ -47,14 +54,8 @@ def write_particles(path_without_ext, pos, vel=None, options=None):
         write_bgeo_from_numpy(path_without_ext + '.bgeo', pos, vel)
 
 
-def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
-               options):
-
-    # init the network
-    model = trainscript_module.create_model()
-    model.init()
-    model.load_weights(weights_path, by_name=True)
-
+def run_sim_tf(trainscript_module, model, scene, num_steps, output_dir,
+               options, h5_path):
     # prepare static particles
     walls = []
     for x in scene['walls']:
@@ -75,16 +76,9 @@ def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
     # prepare fluids
     fluids = []
     for x in scene['fluids']:
-        if 'h5_path' in x and os.path.exists(x['h5_path']):
-            data = read_pos_vel_from_h5(x['h5_path'])
-            points, velocities = data[0], data[1]
-        else:
-            points = obj_volume_to_particles(x['path'])[0]
-            points += np.asarray([x['translation']], dtype=np.float32)
-            velocities = np.empty_like(points)
-            velocities[:, 0] = x['velocity'][0]
-            velocities[:, 1] = x['velocity'][1]
-            velocities[:, 2] = x['velocity'][2]
+        # data = read_pos_vel_from_h5(h5_path)
+        # points, velocities = data[0], data[1]
+        points, velocities = read_pos_vel_from_cconv_h5(h5_path)
         range_ = range(x['start'], x['stop'], x['step'])
         fluids.append((points, velocities, range_))
 
@@ -262,8 +256,22 @@ def main():
         os.makedirs(args.output)
 
     if args.weights.endswith('.h5'):
-        return run_sim_tf(trainscript_module, args.weights, scene,
-                          args.num_steps, args.output, args)
+        # init the network
+        model = trainscript_module.create_model()
+        model.init()
+        model.load_weights(args.weights, by_name=True)
+        start = 0
+        for i in range(0, 400, 20):
+            print(f'\n\n\nstart {i}th predict')
+            cur_frame = i + start
+            start += 1
+            output_dir = f'/datasets/model-predicted/cconv-model-predicted/pos_cconv_valid_{cur_frame//20}_frame_{cur_frame%20}-vel_flownet3d'
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            h5_path = f'/datasets/flownet3d/h5_save/pos_cconv_valid-vel_flownet3d/valid{cur_frame}.h5'
+            run_sim_tf(trainscript_module, model, scene,
+                          args.num_steps, output_dir, args, h5_path)
+        return
     elif args.weights.endswith('.pt'):
         return run_sim_torch(trainscript_module, args.weights, scene,
                              args.num_steps, args.output, args)

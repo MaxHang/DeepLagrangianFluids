@@ -1,12 +1,21 @@
 {
     "walls":[
         {
-            "path":"../datasets/models/Box.obj",
+            "path":"/datasets/cconv/obj/Box.obj",
             "translation":[
                 0,
                 0,
                 0
             ]
+        },
+        {
+            "path":"/datasets/cconv/obj/Box_010_internal.obj",
+            "translation":[
+                0,
+                0,
+                0
+            ],
+            "invert_normals": true
         }
     ],
     "fluids":[
@@ -18,9 +27,9 @@
                 0.2
             ],
             "translation":[
-                0,
+                0.2,
                 3,
-                0
+                -0.2
             ],
             "start":0,
             "stop":1,
