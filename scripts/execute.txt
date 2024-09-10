@@ -28,9 +28,9 @@
                  train_network_tf.py
 
 ./run_network.py --weights pretrained_model_weights.h5 \
-                 --scene test.json \
-                 --num_steps 500 \
-                 --output /datasets/model-predicted/cconv-example/test \
+                 --scene Box_internal.json \
+                 --num_steps 100 \
+                 --output /datasets/model-predicted/cconv-example/Fluid_cude-Box_internal_board_cylinder \
                  train_network_tf.py
 
 ./run_network.py --weights pretrained_model_weights.h5 \
@@ -38,3 +38,38 @@
                  --output /datasets/model-predicted/cconv-example/example_out \
                  --write-ply \
                  train_network_tf.py
+
+./run_network.py --weights /workspace/Constrain-Based-Cconv/weights/constrain_based_v0_0417/model_weights_best.h5 \
+                 --scene Box_internal.json \
+                 --output /workspace/Constrain-Based-Cconv/model-predicted/Fluid_cude-Box_internal_board_cylinder \
+                 --num_steps 500 \
+                 train_constrained_split.py
+
+
+
+### 水滴实验
+# cconv
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene scene_water_drops.json \
+                 --num_steps 2000 \
+                 --output /datasets/model-predicted/cconv-model-predicted/water-drops \
+                 train_network_tf.py
+# constrain-cconv
+./run_network.py --weights /workspace/Constrain-Based-Cconv/weights/constrain_based_v0_0417/model_weights_best.h5 \
+                 --scene scene_water_drops.json \
+                 --output /datasets/model-predicted/constrain-cconv-predicted/water-drops \
+                 --num_steps 2000 \
+                 train_constrained_split.py
+
+### 水滴实验-v2 先让水池里面的水冷静1000个时间步长
+./run_network.py --weights pretrained_model_weights.h5 \
+                 --scene scene_water_drops.json \
+                 --num_steps 2000 \
+                 --output /datasets/model-predicted/cconv-model-predicted/water-drops-v4 \
+                 train_network_tf.py
+# constrain-cconv
+./run_network.py --weights /workspace/Constrain-Based-Cconv/weights/constrain_based_v0_0417/model_weights_best.h5 \
+                 --scene scene_water_drops.json \
+                 --output /datasets/model-predicted/constrain-cconv-predicted/water-drops-v4 \
+                 --num_steps 2000 \
+                 train_constrained_split.py

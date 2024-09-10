@@ -1,0 +1,30 @@
+{
+    "walls":[
+        {
+            "path":"/datasets/cconv/obj/water-pool.obj",
+            "translation":[
+                0,
+                0,
+                0
+            ]
+        }
+    ],
+    "fluids":[
+        {
+            "path":"/datasets/cconv/obj/water-drops.obj",
+            "velocity":[
+                0,
+                0,
+                0
+            ],
+            "translation":[
+                0,
+                0,
+                0
+            ],
+            "start":0,
+            "stop":1,
+            "step":1
+        }
+    ]
+}

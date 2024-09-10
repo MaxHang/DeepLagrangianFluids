@@ -65,7 +65,9 @@ def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
         walls.append((points, normals))
     box = np.concatenate([x[0] for x in walls], axis=0)
     box_normals = np.concatenate([x[1] for x in walls], axis=0)
+    print(box.shape, box_normals.shape)
 
+    exit()
     # export static particles
     write_particles(os.path.join(output_dir, 'box'), box, box_normals, options)
 
