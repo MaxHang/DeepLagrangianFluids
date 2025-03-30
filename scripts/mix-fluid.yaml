@@ -1,0 +1,5 @@
+# dataset_dir: "../datasets/ours_default_data" # path to the dataset directory with 'train' and 'valid' subdirs.
+dataset_dir: "/datasets/graduate/datasets/mix-fluid-cconv" # path to the dataset directory with 'train' and 'valid' subdirs.
+train_data:
+  random_rotation: true # randomly rotate training data about the gravity axis.
+train_dir: "/datasets/graduate/weights/mix-fluid" # path to the directory where the model weights will be saved.

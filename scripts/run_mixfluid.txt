@@ -1,0 +1,16 @@
+## 验证数据集文件
+./run_network_mixfluid.py --weights /datasets/graduate/weights/mix-fluid/train_network_mixfluid_tf_mix-fluid_2025_03_29/model_weights_2025_03_29.h5 \
+                 --scene /workspace/DeepLagrangianFluids/scripts/run_mixfluid_valid.json \
+                 --output /datasets/graduate/run_network/mix_fluid/test_valid \
+                 --write-ply \
+                 --num_steps 800 \
+                 train_network_mixfluid_tf.py
+
+
+
+./run_network_mixfluid.py --weights /datasets/graduate/weights/mix-fluid/train_network_mixfluid_tf_mix-fluid_2025_03_29/model_weights_2025_03_29.h5 \
+                 --scene /workspace/DeepLagrangianFluids/scripts/run_mixfluid_valid.json \
+                 --output /datasets/graduate/run_network/mix_fluid/test_train \
+                 --write-ply \
+                 --num_steps 250 \
+                 train_network_mixfluid_tf.py
