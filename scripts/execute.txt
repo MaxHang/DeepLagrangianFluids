@@ -73,3 +73,11 @@
                  --output /datasets/model-predicted/constrain-cconv-predicted/water-drops-v4 \
                  --num_steps 2000 \
                  train_constrained_split.py
+
+./evaluate_network.py --trainscript train_network_tf.py \
+                --cfg default_snas4.yaml \
+                --weights /workspace/DeepLagrangianFluids/scripts/pretrained_model_weights.h5 > "evaluate_deafult_data.log" 2>&1 &
+
+nohup python evaluate_network.py --trainscript train_network_tf.py \
+                --cfg default_snas4.yaml \
+                --weights /workspace/DeepLagrangianFluids/scripts/pretrained_model_weights.h5 > "evaluate_deafult_data.log" 2>&1 &

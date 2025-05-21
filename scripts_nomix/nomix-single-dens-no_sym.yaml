@@ -1,0 +1,15 @@
+# dataset_dir: "../datasets/ours_default_data" # path to the dataset directory with 'train' and 'valid' subdirs.
+dataset_dir: "/workspace/xyh_synology/graduate/datasets/nomix-single-dens" # path to the dataset directory with 'train' and 'valid' subdirs.
+model:
+  particle_radius: 0.05
+  use_sym: false 
+  multi_density_support: true
+  density_condition_layers: true
+  density_relative: true
+  use_density: true
+  density_embed: false
+  # density_embed_dim: 8
+  rest_dens: 1000
+train_data:
+  random_rotation: true # randomly rotate training data about the gravity axis.
+train_dir: "/workspace/xyh_synology/graduate/weights/nomix-fluid/ablation-single_dens-no_sym" # path to the directory where the model weights will be saved.

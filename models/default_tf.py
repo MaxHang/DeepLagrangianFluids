@@ -1,6 +1,7 @@
 import tensorflow as tf
 import open3d.ml.tf as ml3d
 import numpy as np
+from debug_utils import debug_print
 
 
 class MyParticleNetwork(tf.keras.Model):
@@ -136,6 +137,13 @@ class MyParticleNetwork(tf.keras.Model):
             tf.ones_like(self.conv0_fluid.nns.neighbors_index,
                          dtype=tf.float32),
             self.conv0_fluid.nns.neighbors_row_splits)
+        debug_print("self.num_fluid_neighbors step 100: ", self.num_fluid_neighbors[::100])
+        num_box_neighbors = ml3d.ops.reduce_subarrays_sum(
+            tf.ones_like(self.conv0_obstacle.nns.neighbors_index,
+                         dtype=tf.float32),
+            self.conv0_obstacle.nns.neighbors_row_splits) 
+        # debug_print("self.num_box_neighbors step 100: ", num_box_neighbors[::100])
+        print("self.num_box_neighbors step 100: ", num_box_neighbors[::100])
 
         self.last_features = self.ans_convs[-2]
 

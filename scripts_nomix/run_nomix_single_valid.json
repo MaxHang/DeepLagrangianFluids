@@ -1,0 +1,32 @@
+{
+    "h5_path": "/workspace/xyh_synology/graduate/datasets/nomix-single-dens/valid/density_1000_1000_box_7_cd_1.0_cf_0.0_vel1_0.012_-0.151_-0.932_vel2_0.488_-0.339_-0.88.h5",
+    "frame_id": 2,
+    "walls": [
+        {
+            "path": "/workspace/DeepLagrangianFluids/datasets/models/Box.obj",
+            "translation": [
+                0,
+                0,
+                0
+            ]
+        }
+    ],
+    "fluids": [
+        {
+            "path": "/workspace/DeepLagrangianFluids/datasets/models/Fluid.obj",
+            "velocity": [
+                0.3,
+                0,
+                0.2
+            ],
+            "translation": [
+                0,
+                1,
+                0
+            ],
+            "start": 0,
+            "stop": 1,
+            "step": 1
+        }
+    ]
+}

@@ -69,7 +69,7 @@ def read_pos_vel_from_h5(path, random_rotation=False):
         frame_group = h5f['frames/1']  # 取第一帧
         pos = frame_group['pos'][:]
         vel = frame_group['vel'][:]
-        phase_fractions = frame_group['phase_fractions'][:, :-1] # 只保留前n-1个相的数据
+        phase_fractions = frame_group['phase_fractions'][:] 
     return [box, box_normals, pos, vel, phase_fractions], cd, cf
 
 
@@ -109,14 +109,14 @@ def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, optio
                 phase_name = f"p{i+1}"
                 vertex_data.append((phase_name, phase_fractions[:, i].astype('float32')))
             
-            # 计算最后一个相的体积分数
-            last_phase = np.ones(phase_fractions.shape[0], dtype=np.float32)
-            last_phase -= np.sum(phase_fractions, axis=1)
-            last_phase = np.clip(last_phase, 0.0, 1.0)  # 确保值在[0,1]范围内
+            # # 计算最后一个相的体积分数
+            # last_phase = np.ones(phase_fractions.shape[0], dtype=np.float32)
+            # last_phase -= np.sum(phase_fractions, axis=1)
+            # last_phase = np.clip(last_phase, 0.0, 1.0)  # 确保值在[0,1]范围内
             
-            # 添加最后一个相的体积分数
-            last_phase_idx = phase_fractions.shape[1] + 1
-            vertex_data.append((f"p{last_phase_idx}", last_phase.astype('float32')))
+            # # 添加最后一个相的体积分数
+            # last_phase_idx = phase_fractions.shape[1] + 1
+            # vertex_data.append((f"p{last_phase_idx}", last_phase.astype('float32')))
             
             # 设置颜色，根据相体积分数
             colors = np.zeros((num_particles, 3), dtype=np.float32)
@@ -127,9 +127,6 @@ def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, optio
             # 如果有第二相，设置绿色通道为第二相的体积分数，蓝色通道为最后一相
             if phase_fractions.shape[1] > 1:
                 colors[:, 1] = phase_fractions[:, 1]
-                colors[:, 2] = last_phase
-            else:
-                colors[:, 1] = last_phase
                 
             # 归一化颜色值
             row_sums = np.sum(colors, axis=1, keepdims=True)
@@ -167,6 +164,22 @@ def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, optio
         write_bgeo_from_numpy(path_without_ext + '.bgeo', pos, vel)
 
 
+def read_pos_normal_from_ply(path):
+    """Load ply files from specified path."""
+    pos, normals = None, None
+    with open(path, 'rb') as f:
+        plydata = plyfile.PlyData.read(f)
+        
+        # 获取顶点数据
+        vertices = plydata['vertex'].data
+        
+        # 提取位置和法向量
+        pos = np.vstack([vertices['x'], vertices['y'], vertices['z']]).T
+        if 'nx' in vertices.dtype.names:
+            normals = np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T
+    
+    return pos, normals
+
 def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_dir,
                options, gpu='0'):
 
@@ -187,7 +200,7 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
     print_model_structure(model)
 
     fluids = []
-    cd, cf = 0.5, 0.5
+    cd, cf = 0.3, 0.7
     print(scene.keys())
     if 'h5_path' in scene:
         print(scene['h5_path'])
@@ -200,7 +213,10 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
         # prepare static particles
         walls = []
         for x in scene['walls']:
-            points, normals = obj_surface_to_particles(x['path'])
+            if 'ply_path' in x:
+                points, normals = read_pos_normal_from_ply(x['ply_path'])
+            else:
+                points, normals = obj_surface_to_particles(x['path'])
             if 'invert_normals' in x and x['invert_normals']:
                 normals = -normals
             points += np.asarray([x['translation']], dtype=np.float32)
@@ -214,6 +230,13 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                 points, velocities = data[0], data[1]
                 # 检查是否读取了相体积分数
                 phase_fractions = data[2] if len(data) > 2 else None
+            if 'ply_path' in x:
+                points, _ = read_pos_normal_from_ply(x['ply_path'])
+                velocities = np.empty_like(points)
+                velocities[:, 0] = x['velocity'][0]
+                velocities[:, 1] = x['velocity'][1]
+                velocities[:, 2] = x['velocity'][2]
+                phase_fractions = None
             else:
                 points = obj_volume_to_particles(x['path'])[0]
                 points += np.asarray([x['translation']], dtype=np.float32)
@@ -225,9 +248,7 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                 phase_fractions = None
                 if 'phase_fractions' in x:
                     num_phases = len(x['phase_fractions'])
-                    phase_fractions = np.zeros((points.shape[0], num_phases-1), dtype=np.float32)
-                    for i, frac in enumerate(x['phase_fractions'][:-1]):  # 最后一相可由其他相推导
-                        phase_fractions[:, i] = frac
+                    phase_fractions = np.zeros((points.shape[0], num_phases), dtype=np.float32)
             
             # 获取扩散和交换系数
             cd = x.get('cd', 0.5)
@@ -242,7 +263,7 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
 
     pos = np.empty(shape=(0, 3), dtype=np.float32)
     vel = np.empty_like(pos)
-    phase_fractions = np.empty(shape=(0, model.num_phases-1), dtype=np.float32)
+    phase_fractions = np.empty(shape=(0, model.num_phases), dtype=np.float32)
 
     start_time = time.time()
     for step in range(num_steps):
@@ -251,8 +272,14 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
             if step in range_:  # check if we have to add the fluid at this point in time
                 pos = np.concatenate([pos, points], axis=0)
                 vel = np.concatenate([vel, velocities], axis=0)
+                if fluid_phases is None:
+                    fluid_phases = np.zeros((points.shape[0], model.num_phases), dtype=np.float32)
+                    if step % 8 == 0:
+                        fluid_phases[:, 0] = 1
+                    else:
+                        fluid_phases[:, 1] = 1
                 phase_fractions = np.concatenate([phase_fractions, fluid_phases], axis=0)
-                print('add', points.shape, vel.shape, phase_fractions.shape)
+                print('add', pos.shape, vel.shape, phase_fractions.shape)
 
         if pos.shape[0]:
             fluid_output_path = os.path.join(output_dir,
@@ -262,21 +289,13 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
             else:
                 write_particles(fluid_output_path, pos.numpy(), vel.numpy(), phase_fractions.numpy(), options)
 
-            # 为模型设置初始体积分布（如果首次运行且支持多相流）
-            if step == 0 and phase_fractions is not None and hasattr(model, 'set_initial_phase_volumes'):
-                model.set_initial_phase_volumes(phase_fractions)
-
             # 准备输入，包含相体积分数
             inputs = (pos, vel, phase_fractions, box, box_normals)
             
             # 调用模型执行一步仿真，根据模型输出处理返回结果
             if phase_fractions is not None and hasattr(model, 'num_phases') and model.num_phases > 1:
                 # 执行多相流体模拟
-                output = model(inputs, cd=cd, cf=cf)
-                if len(output) == 3:  # 模型返回位置、速度和相体积分数
-                    pos, vel, phase_fractions = output
-                else:  # 兼容旧模型，只返回位置和速度
-                    pos, vel = output
+                pos, vel, phase_fractions = model(inputs, cd=cd, cf=cf)
             else:
                 # 执行单相流体模拟
                 pos, vel = model(inputs)

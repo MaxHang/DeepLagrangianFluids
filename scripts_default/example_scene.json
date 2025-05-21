@@ -1,9 +1,7 @@
 {
-    "h5_path1": "/datasets/graduate/datasets/mix-fluid-cconv/valid/cd_0.35_cf_0.7.h5",
-    "h5_path": "/datasets/graduate/datasets/mix-fluid-cconv/train/cd_0.37_cf_0.41.h5",
     "walls": [
         {
-            "path": "/workspace/DeepLagrangianFluids/datasets/models/Box.obj",
+            "path": "datasets/models/Box.obj",
             "translation": [
                 0,
                 0,
@@ -13,7 +11,7 @@
     ],
     "fluids": [
         {
-            "path": "/workspace/DeepLagrangianFluids/datasets/models/Fluid.obj",
+            "path": "datasets/models/Fluid.obj",
             "velocity": [
                 0.3,
                 0,
@@ -21,7 +19,7 @@
             ],
             "translation": [
                 0,
-                1,
+                3,
                 0
             ],
             "start": 0,

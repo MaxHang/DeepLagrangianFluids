@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from fluid_evaluation_helper import FluidErrors
+from datasets.dataset_reader_h5_nomix import read_data_val
 import os
 import sys
 import argparse
@@ -10,8 +12,6 @@ import importlib
 import yaml
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from datasets.dataset_reader_h5 import read_data_val
-from fluid_evaluation_helper import FluidErrors
 
 
 def evaluate_tf(model, val_dataset, frame_skip, fluid_errors=None, scale=1):
@@ -25,12 +25,17 @@ def evaluate_tf(model, val_dataset, frame_skip, fluid_errors=None, scale=1):
     last_scene_id = 0
     frames = []
     for data in val_dataset:
+        # if data['frame_id0'][0] == 0:
+        #     frames = []
+        # if data['frame_id0'][0] % skip < 3:
+        #     frames.append(data)
+        # if data['frame_id0'][0] % skip == 3:
         if data['frame_id0'][0] == 1:
             frames = []
         if data['frame_id0'][0] % skip < 4:
             frames.append(data)
         if data['frame_id0'][0] % skip == 4:
-            # 确保收集到足够的帧数
+
             if len(
                     set([
                         frames[0]['scene_id0'][0], frames[1]['scene_id0'][0],
@@ -45,48 +50,21 @@ def evaluate_tf(model, val_dataset, frame_skip, fluid_errors=None, scale=1):
                 frame2_id = frames[2]['frame_id0'][0]
                 box = frames[0]['box'][0]
                 box_normals = frames[0]['box_normals'][0]
+                density = frames[0]['density'][0]
                 gt_pos1 = frames[1]['pos0'][0]
                 gt_pos2 = frames[2]['pos0'][0]
 
-                phase_fractions = frames[0].get('phase_fractions0', [None])[0]
+                inputs = (frames[0]['pos0'][0], frames[0]['vel0'][0], density, None, box,
+                          box_normals)
+                pr_pos1, pr_vel1 = model(inputs)
 
-                # 进行第一次预测
-                inputs = (frames[0]['pos0'][0], frames[0]['vel0'][0], phase_fractions, box, box_normals)
-                
-                # 多相流体模型预测
-                cd_sample = frames[0].get('cd', 0.5)
-                cf_sample = frames[0].get('cf', 0.5)
-                if isinstance(cd_sample, (list, np.ndarray)):
-                    cd_val = cd_sample[0]
-                else:
-                    cd_val = cd_sample
-                if isinstance(cf_sample, (list, np.ndarray)):
-                    cf_val = cf_sample[0]
-                else:
-                    cf_val = cf_sample
-                pr_pos1, pr_vel1, pr_phase1 = model(inputs, cd=cd_val, cf=cf_val)
-                
-                # 第二次预测
-                inputs = (pr_pos1, pr_vel1, pr_phase1, box, box_normals)
-                pr_pos2, pr_vel2, pr_phase2 = model(inputs, cd=cd_val, cf=cf_val)
+                inputs = (pr_pos1, pr_vel1, density, None, box, box_normals)
+                pr_pos2, pr_vel2 = model(inputs)
 
-
-                # 确保帧ID是按照正确顺序的 (小的在前，大的在后)
-                if frame0_id <= frame1_id:
-                    fluid_errors.add_errors(scene_id, frame0_id, frame1_id,
+                fluid_errors.add_errors(scene_id, frame0_id, frame1_id,
                                         scale * pr_pos1, scale * gt_pos1)
-                else:
-                    # 如果帧顺序不对，交换一下
-                    fluid_errors.add_errors(scene_id, frame1_id, frame0_id,
-                                        scale * gt_pos1, scale * pr_pos1)
-                    
-                if frame0_id <= frame2_id:
-                    fluid_errors.add_errors(scene_id, frame0_id, frame2_id,
+                fluid_errors.add_errors(scene_id, frame0_id, frame2_id,
                                         scale * pr_pos2, scale * gt_pos2)
-                else:
-                    # 如果帧顺序不对，交换一下
-                    fluid_errors.add_errors(scene_id, frame2_id, frame0_id,
-                                        scale * gt_pos2, scale * pr_pos2)
 
             frames = []
 
@@ -115,13 +93,6 @@ def evaluate_whole_sequence_tf(model,
     skip = frame_skip
 
     last_scene_id = None
-    pr_pos = None
-    pr_vel = None
-    pr_phase = None
-    
-    # 检查是否为多相流体模型
-    has_phases = hasattr(model, 'num_phases') and model.num_phases > 1
-    
     for data in val_dataset:
         scene_id = data['scene_id0'][0]
         if last_scene_id is None or last_scene_id != scene_id:
@@ -131,43 +102,22 @@ def evaluate_whole_sequence_tf(model,
             box_normals = data['box_normals'][0]
             init_pos = data['pos0'][0]
             init_vel = data['vel0'][0]
-            
-            # 获取相分数数据（如果存在）
-            phase_fractions = data.get('phase_fractions0', [None])[0]
-            
-            inputs = (init_pos, init_vel, phase_fractions, box, box_normals)
-        else:
-            if has_phases and pr_phase is not None:
-                inputs = (pr_pos, pr_vel, pr_phase, box, box_normals)
-            else:
-                inputs = (pr_pos, pr_vel, None, box, box_normals)
 
-        # 根据模型类型调用不同的预测方式
-        if has_phases and 'phase_fractions0' in data:
-            # 多相流体模型预测
-            cd = data.get('cd', 0.5)
-            cf = data.get('cf', 0.5)
-            pr_pos, pr_vel, pr_phase = model(inputs, cd=cd, cf=cf)
+            inputs = (init_pos, init_vel, None, box, box_normals)
         else:
-            # 单相流体模型预测
-            pr_pos, pr_vel = model(inputs)
+            inputs = (pr_pos, pr_vel, None, box, box_normals)
+
+        pr_pos, pr_vel = model(inputs)
 
         frame_id = data['frame_id0'][0]
         if frame_id > 0 and frame_id % skip == 0:
             gt_pos = data['pos0'][0]
-            # 使用0作为初始帧，确保初始帧始终小于当前帧
-            init_frame = 0  # 使用固定的初始帧ID
-            curr_frame = frame_id
-            # 确保帧ID顺序正确
-            if init_frame < curr_frame:
-                fluid_errors.add_errors(scene_id,
-                                    init_frame,
-                                    curr_frame,
+            fluid_errors.add_errors(scene_id,
+                                    0,
+                                    frame_id,
                                     scale * pr_pos,
                                     scale * gt_pos,
                                     compute_gt2pred_distance=True)
-            else:
-                print(f"警告: 跳过帧 {curr_frame}, 初始帧ID应小于当前帧ID")
 
     result = {}
     result['whole_seq_err'] = np.mean([
@@ -408,7 +358,10 @@ def main():
 
     train_dir = module_name + '_' + os.path.splitext(os.path.basename(
         args.cfg))[0]
-    val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.zst')))
+    # val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.zst')))
+    val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'test', '*.zst')))
+    print("path", os.path.join(cfg['dataset_dir'], 'test'))
+    print("len", len(val_files))
 
     if args.weights is not None:
         print('evaluating :', args.weights)

@@ -1,0 +1,7 @@
+# dataset_dir: "../datasets/ours_default_data" # path to the dataset directory with 'train' and 'valid' subdirs.
+dataset_dir: "/workspace/xyh_synology/cconv/ours_default_data" # path to the dataset directory with 'train' and 'valid' subdirs.
+train_data:
+  random_rotation: true # randomly rotate training data about the gravity axis.
+model:
+  particle_radius: 0.025
+train_dir: "/workspace/xyh_synology/graduate/weights/cconv_deafault"

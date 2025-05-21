@@ -352,7 +352,10 @@ def main():
 
     train_dir = module_name + '_' + os.path.splitext(os.path.basename(
         args.cfg))[0]
-    val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.zst')))
+    # val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.zst')))
+    val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'test', '*.zst')))
+    print("path", os.path.join(cfg['dataset_dir'], 'test'))
+    print("len", len(val_files))
 
     if args.weights is not None:
         print('evaluating :', args.weights)

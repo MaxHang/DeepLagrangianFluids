@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import open3d as o3d
 import os
 import sys
 import argparse
@@ -11,18 +12,19 @@ import importlib
 import json
 import tensorflow as tf
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'datasets'))
-from physics_data_helper import numpy_from_bgeo, write_bgeo_from_numpy
 from create_physics_scenes import obj_surface_to_particles, obj_volume_to_particles
-import open3d as o3d
+from physics_data_helper import numpy_from_bgeo, write_bgeo_from_numpy
 
 # 在创建模型后添加
+
+
 def print_model_structure(model):
     """Print model structure information in text format"""
     print("\n======= MODEL STRUCTURE SUMMARY =======")
-    
+
     # Use built-in summary method
     model.summary()
-    
+
     # Print network layer information and parameters
     print("\nLayer Details:")
     total_params = 0
@@ -30,7 +32,7 @@ def print_model_structure(model):
     for layer_idx, layer in enumerate(model.layers):
         layer_name = getattr(layer, 'name', f'layer_{layer_idx}')
         print(f"Layer {layer_idx}: {layer_name}")
-        
+
         # Print parameters for each layer
         layer_params = 0
         if hasattr(layer, 'trainable_variables'):
@@ -39,22 +41,23 @@ def print_model_structure(model):
                 layer_params += params
                 trainable_params += params
                 print(f"  - {var.name}: {var.shape} = {params:,} params")
-                
+
         print(f"  Total params in layer: {layer_params:,}")
         total_params += layer_params
-    
+
     # Print network architecture specifics if available
     if hasattr(model, 'layer_channels'):
         print(f"\nChannel configuration: {model.layer_channels}")
-    
+
     if hasattr(model, '_all_convs'):
         print("\nConvolution layers:")
         for name, _ in model._all_convs:
             print(f"  - {name}")
-    
+
     print(f"\nTotal parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
     print("===================================\n")
+
 
 def read_pos_vel_from_h5(path):
     """Load h5py data files from specified path."""
@@ -66,7 +69,7 @@ def read_pos_vel_from_h5(path):
         data.append(d[0])
         # data.append(d[-1])
         d[..., 0] *= -1
-        d[..., [1,2]] = d[..., [2,1]]
+        d[..., [1, 2]] = d[..., [2, 1]]
     hf.close()
     return data
 
@@ -94,7 +97,16 @@ def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
     # init the network
     model = trainscript_module.create_model()
     model.init()
-    model.load_weights(weights_path, by_name=True)
+    # 支持ckpt和h5两种权重格式
+    if weights_path.endswith('.ckpt') or weights_path.endswith('.index'):
+        checkpoint = tf.train.Checkpoint(model=model)
+        restore_path = weights_path
+        if restore_path.endswith('.index'):
+            restore_path = restore_path[:-6]
+        print(f"Restoring from checkpoint: {restore_path}")
+        checkpoint.restore(restore_path).expect_partial()
+    else:
+        model.load_weights(weights_path, by_name=True)
 
     print_model_structure(model)
 
@@ -110,7 +122,7 @@ def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
     box_normals = np.concatenate([x[1] for x in walls], axis=0)
     print(box.shape, box_normals.shape)
 
-    exit()
+    # exit()
     # export static particles
     write_particles(os.path.join(output_dir, 'box'), box, box_normals, options)
 
@@ -170,7 +182,7 @@ def run_sim_tf(trainscript_module, weights_path, scene, num_steps, output_dir,
                 pos = pos[mask]
                 vel = vel[mask]
 
-    end_time = time.time()  
+    end_time = time.time()
     print('Total time: ', end_time - start_time)
     print('average time: ', (end_time - start_time) / num_steps)
 
@@ -256,8 +268,7 @@ def run_sim_torch(trainscript_module, weights_path, scene, num_steps,
 
 def main():
     parser = argparse.ArgumentParser(
-        description=
-        "Runs a fluid network on the given scene and saves the particle positions as npz sequence",
+        description="Runs a fluid network on the given scene and saves the particle positions as npz sequence",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("trainscript",
                         type=str,
@@ -266,9 +277,9 @@ def main():
         "--weights",
         type=str,
         required=True,
-        help=
-        "The path to the .h5 network weights file for tensorflow ot the .pt weights file for torch."
+        help="The path to the .h5 network weights file for tensorflow ot the .pt weights file for torch."
     )
+    
     parser.add_argument("--num_steps",
                         type=int,
                         default=250,
@@ -311,18 +322,17 @@ def main():
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
-    start_time = time.time()
-    if args.weights.endswith('.h5'):
-        return run_sim_tf(trainscript_module, args.weights, scene,
+    return run_sim_tf(trainscript_module, args.weights, scene,
                           args.num_steps, args.output, args)
-    
-    elif args.weights.endswith('.pt'):
-        return run_sim_torch(trainscript_module, args.weights, scene,
-                             args.num_steps, args.output, args)
 
-    end_time = time.time()  
-    print('Total time: ', end_time - start_time)
-    print('average time: ', (end_time - start_time) / args.num_steps)
+    # if args.weights.endswith('.h5'):
+    #     return run_sim_tf(trainscript_module, args.weights, scene,
+    #                       args.num_steps, args.output, args)
+
+    # elif args.weights.endswith('.pt'):
+    #     return run_sim_torch(trainscript_module, args.weights, scene,
+    #                          args.num_steps, args.output, args)
+
 
 if __name__ == '__main__':
     sys.exit(main())
