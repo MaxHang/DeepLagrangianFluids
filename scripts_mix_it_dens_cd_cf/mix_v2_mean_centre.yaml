@@ -1,0 +1,9 @@
+dataset_dir: "/workspace/xyh_synology/graduate/datasets/mix-it-dens-cd-cf" # path to the dataset directory with 'train' and 'valid' subdirs.
+model:
+  particle_radius: 0.05
+  max_num_phases: 2
+  # aggregation: 'mean' # deepset aggregation method, defauilt 'mean', choice: ['sum', 'mean']
+  phase_feat_centralization: true # default False, whether to centralize phase features to zero mean.
+train_data:
+  random_rotation: true # randomly rotate training data about the gravity axis.
+train_dir: "/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2" # path to the directory where the model weights will be saved.

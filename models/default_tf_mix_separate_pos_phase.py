@@ -125,49 +125,47 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
                                                        name="vf_final_dense",
                                                        activation=None)
 
-    def integrate_pos_vel(self, pos1, vel1):
-        dt = self.timestep
-        vel2 = vel1 + dt * self.gravity
-        pos2 = pos1 + dt * (vel1 + vel2) / 2.0 # More stable: use average velocity over timestep
-        return pos2, vel2
+    def call(self, inputs, training=False, fixed_radius_search_hash_table=None, cd=0.5, cf=0.5):
+        pos1, vel1, current_phase_fractions, box_pos, box_feats = inputs
 
-    def compute_new_pos_vel(self, pos1, vel1, pos2_integrated, vel2_integrated, pos_correction):
-        dt = self.timestep
-        # Apply correction to the integrated position
-        pos_final = pos2_integrated + pos_correction
-        # Velocity is based on the change from original position to final corrected position
-        vel_final = (pos_final - pos1) / dt
-        return pos_final, vel_final
+        # 1. 积分位置和速度
+        pos2_integrated, vel2_integrated = self.integrate_pos_vel(pos1, vel1)
+
+        # 2. 计算共享特征（这是最耗时的部分）
+        shared_features = self.compute_shared_features(
+            pos2_integrated,
+            vel2_integrated,
+            current_phase_fractions,
+            box_pos,
+            box_feats,
+            fixed_radius_search_hash_table,
+            cd_scalar=cd,
+            cf_scalar=cf)
+
+        # 3. 基于共享特征预测位置修正
+        pos_correction = self.compute_position_correction_from_shared(
+            shared_features, pos2_integrated)
+
+        # 4. 应用位置修正并计算最终速度
+        pos_final, vel_final = self.compute_new_pos_vel(
+            pos1, vel1, pos2_integrated, vel2_integrated, pos_correction)
+
+        # 5. 基于共享特征和修正后的位置预测相分数logits
+        next_vf_logits = None
+        if self.num_phases > 1:
+            # 注意：这里使用修正后的位置进行相分数预测
+            next_vf_logits = self.compute_vf_logits_from_shared(
+                shared_features, pos_final)
+
+        # 6. 计算下一时步的相分数
+        next_phase_fractions_final = current_phase_fractions
+        if self.num_phases > 1 and next_vf_logits is not None:
+            next_phase_fractions_final = self.compute_next_phase_fractions(
+                current_phase_fractions,
+                next_vf_logits)
+        
+        return pos_final, vel_final, next_phase_fractions_final
     
-    def compute_next_phase_fractions(self, current_phase_fractions, network_vf_logits):
-        """
-        Computes the next phase fractions using softmax for stability.
-        Args:
-            current_phase_fractions: Tensor [batch_size, num_particles, num_phases], current VFs.
-                                     Used for potential residual connection if desired.
-            network_vf_logits: Tensor [batch_size, num_particles, num_phases], raw logits from the network.
-        """
-        if self.num_phases <= 1:
-            return current_phase_fractions
-
-        # Option 1: Network predicts new logits directly
-        # For stability, it can be beneficial if the network predicts a *change* to the logits
-        # or if the logits are somehow scaled relative to the current state.
-        # For now, let's assume network_vf_logits are the new logits.
-        
-        # Residual connection to logits (optional, can help learning identity for stable regions)
-        # One way to add residual: transform current_phase_fractions to a logit-like space
-        # inverse_softmax_approx = tf.math.log(current_phase_fractions + 1e-8) # Add epsilon
-        # combined_logits = inverse_softmax_approx + network_vf_logits # Network learns a delta in logit space
-        
-        # Or simpler: network directly predicts the logits for the next step
-        combined_logits = network_vf_logits
-
-        # Apply softmax to get normalized, non-negative phase fractions
-        next_fractions = tf.nn.softmax(combined_logits, axis=-1)
-        
-        return next_fractions
-
     def compute_shared_features(self,
                                pos,
                                vel,
@@ -242,6 +240,51 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
             self.shared_conv0_fluid.nns.neighbors_row_splits)
 
         return shared_features
+    
+    def compute_next_phase_fractions(self, current_phase_fractions, network_vf_logits):
+        """
+        Computes the next phase fractions using softmax for stability.
+        Args:
+            current_phase_fractions: Tensor [batch_size, num_particles, num_phases], current VFs.
+                                     Used for potential residual connection if desired.
+            network_vf_logits: Tensor [batch_size, num_particles, num_phases], raw logits from the network.
+        """
+        if self.num_phases <= 1:
+            return current_phase_fractions
+
+        # Option 1: Network predicts new logits directly
+        # For stability, it can be beneficial if the network predicts a *change* to the logits
+        # or if the logits are somehow scaled relative to the current state.
+        # For now, let's assume network_vf_logits are the new logits.
+        
+        # Residual connection to logits (optional, can help learning identity for stable regions)
+        # One way to add residual: transform current_phase_fractions to a logit-like space
+        # inverse_softmax_approx = tf.math.log(current_phase_fractions + 1e-8) # Add epsilon
+        # combined_logits = inverse_softmax_approx + network_vf_logits # Network learns a delta in logit space
+        
+        # Or simpler: network directly predicts the logits for the next step
+        combined_logits = network_vf_logits
+
+        # Apply softmax to get normalized, non-negative phase fractions
+        next_fractions = tf.nn.softmax(combined_logits, axis=-1)
+        
+        return next_fractions
+
+    # --- 辅助方法 ---
+
+    def integrate_pos_vel(self, pos1, vel1):
+        dt = self.timestep
+        vel2 = vel1 + dt * self.gravity
+        pos2 = pos1 + dt * (vel1 + vel2) / 2.0 # More stable: use average velocity over timestep
+        return pos2, vel2
+
+    def compute_new_pos_vel(self, pos1, vel1, pos2_integrated, vel2_integrated, pos_correction):
+        dt = self.timestep
+        # Apply correction to the integrated position
+        pos_final = pos2_integrated + pos_correction
+        # Velocity is based on the change from original position to final corrected position
+        vel_final = (pos_final - pos1) / dt
+        return pos_final, vel_final
 
     def compute_position_correction_from_shared(self, shared_features, pos):
         """基于共享特征预测位置修正"""
@@ -280,47 +323,6 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         
         debug_print("Shape of vf_logits from shared network: ", tf.shape(vf_logits))
         return vf_logits
-
-    def call(self, inputs, training=False, fixed_radius_search_hash_table=None, cd=0.5, cf=0.5):
-        pos1, vel1, current_phase_fractions, box_pos, box_feats = inputs
-
-        # 1. 积分位置和速度
-        pos2_integrated, vel2_integrated = self.integrate_pos_vel(pos1, vel1)
-
-        # 2. 计算共享特征（这是最耗时的部分）
-        shared_features = self.compute_shared_features(
-            pos2_integrated,
-            vel2_integrated,
-            current_phase_fractions,
-            box_pos,
-            box_feats,
-            fixed_radius_search_hash_table,
-            cd_scalar=cd,
-            cf_scalar=cf)
-
-        # 3. 基于共享特征预测位置修正
-        pos_correction = self.compute_position_correction_from_shared(
-            shared_features, pos2_integrated)
-
-        # 4. 应用位置修正并计算最终速度
-        pos_final, vel_final = self.compute_new_pos_vel(
-            pos1, vel1, pos2_integrated, vel2_integrated, pos_correction)
-
-        # 5. 基于共享特征和修正后的位置预测相分数logits
-        next_vf_logits = None
-        if self.num_phases > 1:
-            # 注意：这里使用修正后的位置进行相分数预测
-            next_vf_logits = self.compute_vf_logits_from_shared(
-                shared_features, pos_final)
-
-        # 6. 计算下一时步的相分数
-        next_phase_fractions_final = current_phase_fractions
-        if self.num_phases > 1 and next_vf_logits is not None:
-            next_phase_fractions_final = self.compute_next_phase_fractions(
-                current_phase_fractions,
-                next_vf_logits)
-        
-        return pos_final, vel_final, next_phase_fractions_final
 
     def init(self, feats_shape=None):
         """使用虚拟数据初始化模型"""

@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # 定义变量, 批量处理文件夹
-RUN_SCRIPT="scripts/run_mix_spearate_pos_phase.py"
-TRAIN_SCRIPT="scripts/train_network_mix_tf_spearate_pos_phase.py"
-YAML_FILE="scripts_mix/mix_separate_pos_phase.yaml"
+RUN_SCRIPT="scripts/run_mix_v0.py"
+TRAIN_SCRIPT="scripts/train_mix_v0.py"
+YAML_FILE="scripts_mix_it_dens_cd_cf/mix_v0_old_datasets.yaml"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
-LOG_FILE="scripts_mix/run_mix_spearate_pos_phase_${DATE}.log"  # 定义日志文件名，包含日期和时间
-SCENE="scripts_mix/canyon_scene.json"
+LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v0_old_datasets_${DATE}.log"  # 定义日志文件名，包含日期和时间
+SCENE="scripts_mix_it_dens_cd_cf/canyon_scene_old_datasets.json"
 OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_${DATE}"
-# NUMSTEPS=2000
 NUMSTEPS=2000
-GPU_ID="0"  # 默认使用GPU 0
-WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_separate_pos_phase/train_network_mix_tf_spearate_pos_phase_mix_separate_pos_phase_20250616/checkpoints/ckpt-30000.index"
+# NUMSTEPS=800
+GPU_ID="1"  # 默认使用GPU 0
+WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v0/old_datasets/train_mix_v0_mix_v0_old_datasets_20250717/model_weights_2025_07_18.h5"
 
 # 检查输入参数
 if [ "$#" -ge 1 ]; then
@@ -43,6 +43,6 @@ nohup python "$RUN_SCRIPT" \
 PID=$!
 echo "脚本已在后台运行，进程 ID: $PID"
 echo "脚本已在后台运行，日志输出到 $LOG_FILE"
-echo "可以使用以下命令查看训练进度:"
+echo "可以使用以下命令查看进度:"
 echo "  tail -f $LOG_FILE"
 exit 0

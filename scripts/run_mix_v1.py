@@ -58,31 +58,40 @@ def print_model_structure(model):
     print(f"Trainable parameters: {trainable_params:,}")
     print("===================================\n")
 
-
 def read_pos_vel_from_h5(path, random_rotation=False):
-    """Load h5py data files from specified path."""
+    """从h5py数据文件中加载数据，并尝试加载场景属性。"""
     with h5py.File(path, 'r') as h5f:
         box = h5f['box'][:]
         box_normals = h5f['box_normals'][:]
-        cd = np.float32(h5f.attrs['cd'])
-        cf = np.float32(h5f.attrs['cf'])
-        frame_group = h5f['frames/1']  # 取第一帧
+        cd = np.float32(h5f.attrs.get('cd', 0.5))
+        cf = np.float32(h5f.attrs.get('cf', 0.5))
+        
+        # 尝试从 h5 属性中读取场景信息
+        num_phases = int(h5f.attrs.get('num_phases', 2))
+        # 如果 'density' 存在，则读取，否则根据num_phases创建默认值
+        if 'density' in h5f.attrs:
+            density = np.array(h5f.attrs['density'], dtype=np.float32)
+        else:
+            density = np.full(shape=(num_phases,), fill_value=1000.0, dtype=np.float32)
+
+        frame_group = h5f['frames/1']
         pos = frame_group['pos'][:]
         vel = frame_group['vel'][:]
-        phase_fractions = frame_group['phase_fractions'][:] 
-    return [box, box_normals, pos, vel, phase_fractions], cd, cf
-
+        phase_fractions = frame_group['phase_fractions'][:]
+        
+    scene_props = {'num_phases': num_phases, 'density': density}
+    return [box, box_normals, pos, vel, phase_fractions], cd, cf, scene_props
 
 def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, options=None):
     """Writes the particles as point cloud ply.
     Optionally writes particles as bgeo which also supports velocities.
     """
-    arrs = {'pos': pos}
-    if vel is not None:
-        arrs['vel'] = vel
-    if phase_fractions is not None:
-        arrs['phase_fractions'] = phase_fractions
-    np.savez(path_without_ext + '.npz', **arrs)
+    # arrs = {'pos': pos}
+    # if vel is not None:
+    #     arrs['vel'] = vel
+    # if phase_fractions is not None:
+    #     arrs['phase_fractions'] = phase_fractions
+    # np.savez(path_without_ext + '.npz', **arrs)
 
     if options and options.write_ply:
         # 准备需要写入到PLY的数据
@@ -197,20 +206,36 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
     else:
         model.load_weights(weights_path, by_name=True)
 
-    print_model_structure(model)
+    # print_model_structure(model)
 
-    print(scene.keys())
-    cd, cf = 0.3, 0.7
     fluids = []
-    
+    cd, cf = None, None
+    scene_num_phases, scene_phase_densities = None, None
+    print(scene.keys())
     if 'h5_path' in scene:
         print(scene['h5_path'])
-        data, cd, cf = read_pos_vel_from_h5(scene['h5_path'], random_rotation=True)
+        data, cd, cf, h5_scene_props = read_pos_vel_from_h5(scene['h5_path'], random_rotation=True)
         box, box_normals, points, velocities, phase_fractions = data
+        # h5文件中的属性优先
+        scene_num_phases = h5_scene_props['num_phases']
+        scene_phase_densities = h5_scene_props['density']
+        print(f"Scene properties loaded from H5: {scene_num_phases} phases with densities {scene_phase_densities}")
+        print(f"Diffusion coefficient (cd): {cd}, Convection coefficient (cf): {cf}")
         x = scene['fluids'][0]
         range_ = range(x['start'], x['stop'], x['step'])
         fluids.append((points, velocities, phase_fractions, cd, cf, range_))
     else:
+        ## V4-MOD: 从场景定义中获取场景属性
+        props = scene['scene_properties']
+        scene_num_phases = int(props.get('num_phases', 1))
+        scene_phase_densities = np.array(props.get('density', [1000.0]*scene_num_phases), dtype=np.float32)
+        print(f"Scene properties loaded: {scene_num_phases} phases with densities {scene_phase_densities}")
+        
+        # 获取扩散和交换系数
+        cd = props.get('cd', 0.5)
+        cf = props.get('cf', 0.5)
+        print(f"Diffusion coefficient (cd): {cd}, Convection coefficient (cf): {cf}")
+
         # prepare static particles
         walls = []
         for x in scene['walls']:
@@ -224,6 +249,7 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
             walls.append((points, normals))
         box = np.concatenate([x[0] for x in walls], axis=0)
         box_normals = np.concatenate([x[1] for x in walls], axis=0)
+        print(f"Box shape: {box.shape}, Normals shape: {box_normals.shape}")
         # prepare fluids
         for x in scene['fluids']:
             if 'h5_path' in x and os.path.exists(x['h5_path']):
@@ -250,68 +276,77 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                 if 'phase_fractions' in x:
                     num_phases = len(x['phase_fractions'])
                     phase_fractions = np.zeros((points.shape[0], num_phases), dtype=np.float32)
-
+            
             range_ = range(x['start'], x['stop'], x['step'])
             fluids.append((points, velocities, phase_fractions, cd, cf, range_))
+
+    # 确保模型可以处理场景所需的相数
+    if scene_num_phases > model.max_num_phases:
+        raise ValueError(f"Scene requires {scene_num_phases} phases, but model was built for a max of {model.max_num_phases}.")
     
     # compute lowest point for removing out of bounds particles
     min_y = np.min(box[:, 1]) - 0.05 * (np.max(box[:, 1]) - np.min(box[:, 1]))
     # export static particles
     write_particles(os.path.join(output_dir, 'box'), box, box_normals, None, options)
 
+    ## V4-MOD: 初始化粒子状态数组时使用从场景中读取的相数
     pos = np.empty(shape=(0, 3), dtype=np.float32)
     vel = np.empty_like(pos)
-    phase_fractions = np.empty(shape=(0, model.num_phases), dtype=np.float32)
+    phase_fractions = np.empty(shape=(0, scene_num_phases), dtype=np.float32)
 
     start_time = time.time()
     for step in range(num_steps):
-        # add from fluids to pos vel arrays
+        # 注入新的流体粒子
         for points, velocities, fluid_phases, cd, cf, range_ in fluids:
             if step in range_:  # check if we have to add the fluid at this point in time
                 pos = np.concatenate([pos, points], axis=0)
                 vel = np.concatenate([vel, velocities], axis=0)
+
+                # 如果注入的流体没有定义相分数，则根据场景相数创建默认值
                 if fluid_phases is None:
-                    fluid_phases = np.zeros((points.shape[0], model.num_phases), dtype=np.float32)
+                    fluid_phases = np.zeros((points.shape[0], scene_num_phases), dtype=np.float32)
                     if step % 8 == 0:
-                        fluid_phases[:, 0] = 1
+                        fluid_phases[:, 0] = 1 # 默认全为第一相
                     else:
-                        fluid_phases[:, 1] = 1
+                        fluid_phases[:, 1] = 1 # 默认全为第2相
                 phase_fractions = np.concatenate([phase_fractions, fluid_phases], axis=0)
                 print('add', pos.shape, vel.shape, phase_fractions.shape)
 
-        if pos.shape[0]:
-            fluid_output_path = os.path.join(output_dir,
-                                             'fluid_{0:04d}'.format(step))
-            if isinstance(pos, np.ndarray):
-                write_particles(fluid_output_path, pos, vel, phase_fractions, options)
-            else:
-                write_particles(fluid_output_path, pos.numpy(), vel.numpy(), phase_fractions.numpy(), options)
+        if pos.shape[0] > 0:
+            fluid_output_path = os.path.join(output_dir, f'fluid_{step:04d}')
+            write_particles(fluid_output_path, pos, vel, phase_fractions, options)
 
-            # 准备输入，包含相体积分数
-            inputs = (pos, vel, phase_fractions, box, box_normals)
+            # 准备模型输入
+            inputs = (tf.constant(pos), tf.constant(vel), tf.constant(phase_fractions), 
+                      tf.constant(box), tf.constant(box_normals))
             
-            # 调用模型执行一步仿真，根据模型输出处理返回结果
-            if phase_fractions is not None and hasattr(model, 'num_phases') and model.num_phases > 1:
-                # 执行多相流体模拟
-                pos, vel, phase_fractions = model(inputs, cd=cd, cf=cf)
-            else:
-                # 执行单相流体模拟
-                pos, vel = model(inputs)
+            ## V4-MOD: 使用统一的、新的模型调用签名
+            pos_tensor, vel_tensor, phase_fractions_tensor = model(
+                inputs,
+                current_num_phases=tf.constant(scene_num_phases, dtype=tf.int32),
+                phase_densities=tf.constant(scene_phase_densities, dtype=tf.float32),
+                cd=tf.constant(cd, dtype=tf.float32),
+                cf=tf.constant(cf, dtype=tf.float32),
+                training=False
+            )
+            # 将输出转换回 numpy 数组以进行下一步处理
+            pos, vel, phase_fractions = pos_tensor.numpy(), vel_tensor.numpy(), phase_fractions_tensor.numpy()
 
         # remove out of bounds particles
         if step % 10 == 0:
-            print(step, 'num particles', pos.shape[0])
+            print(f'Step {step}, Num particles: {pos.shape[0]}')
             mask = pos[:, 1] > min_y
             if np.count_nonzero(mask) < pos.shape[0]:
                 pos = pos[mask]
                 vel = vel[mask]
-                # 同样过滤相体积分数
                 if phase_fractions is not None:
                     phase_fractions = phase_fractions[mask]
 
     end_time = time.time()  
-    print('Total time: ', end_time - start_time)
-    print('average time: ', (end_time - start_time) / num_steps)
+    total_time = end_time - start_time
+    avg_time = total_time / num_steps if num_steps > 0 else 0
+    print(f'Total time: {total_time:.2f}s')
+    print(f'Average time per step: {avg_time:.4f}s')
 
 
 def main():

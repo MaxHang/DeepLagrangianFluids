@@ -66,23 +66,31 @@ def read_pos_vel_from_h5(path, random_rotation=False):
         box_normals = h5f['box_normals'][:]
         cd = np.float32(h5f.attrs['cd'])
         cf = np.float32(h5f.attrs['cf'])
+        # 尝试从 h5 属性中读取场景信息
+        num_phases = int(h5f.attrs.get('num_phases', 2))
+        # 如果 'density' 存在，则读取，否则根据num_phases创建默认值
+        if 'density' in h5f.attrs:
+            density = np.array(h5f.attrs['density'], dtype=np.float32)
+        else:
+            density = np.full(shape=(num_phases,), fill_value=1000.0, dtype=np.float32)
         frame_group = h5f['frames/1']  # 取第一帧
         pos = frame_group['pos'][:]
         vel = frame_group['vel'][:]
         phase_fractions = frame_group['phase_fractions'][:] 
-    return [box, box_normals, pos, vel, phase_fractions], cd, cf
+    scene_props = {'num_phases': num_phases, 'density': density}
+    return [box, box_normals, pos, vel, phase_fractions], cd, cf, scene_props
 
 
 def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, options=None):
     """Writes the particles as point cloud ply.
     Optionally writes particles as bgeo which also supports velocities.
     """
-    arrs = {'pos': pos}
-    if vel is not None:
-        arrs['vel'] = vel
-    if phase_fractions is not None:
-        arrs['phase_fractions'] = phase_fractions
-    np.savez(path_without_ext + '.npz', **arrs)
+    # arrs = {'pos': pos}
+    # if vel is not None:
+    #     arrs['vel'] = vel
+    # if phase_fractions is not None:
+    #     arrs['phase_fractions'] = phase_fractions
+    # np.savez(path_without_ext + '.npz', **arrs)
 
     if options and options.write_ply:
         # 准备需要写入到PLY的数据
@@ -199,17 +207,25 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
 
     print_model_structure(model)
 
+
     print(scene.keys())
-    cd, cf = 0.3, 0.7
+    props = scene['scene_properties']
+    scene_phase_densities = np.array(props.get('density'), dtype=np.float32)
+    cd = props.get('cd', 0.5)
+    cf = props.get('cf', 0.5)
+    print(f"Scene properties loaded from H5: densities {scene_phase_densities}")
+    print(f"Diffusion coefficient (cd): {cd}, Convection coefficient (cf): {cf}")
+
     fluids = []
-    
     if 'h5_path' in scene:
         print(scene['h5_path'])
-        data, cd, cf = read_pos_vel_from_h5(scene['h5_path'], random_rotation=True)
+        data, cd, cf, h5_scene_props = read_pos_vel_from_h5(scene['h5_path'], random_rotation=True)
+        scene_phase_densities = h5_scene_props['density']
         box, box_normals, points, velocities, phase_fractions = data
         x = scene['fluids'][0]
         range_ = range(x['start'], x['stop'], x['step'])
         fluids.append((points, velocities, phase_fractions, cd, cf, range_))
+        print(f"load all data from h5 file: pos shape: {points.shape}, vel shape: {velocities.shape}, phase shape: {phase_fractions.shape}, box shape: {box.shape}, box_normals shape: {box_normals.shape}")
     else:
         # prepare static particles
         walls = []
@@ -224,13 +240,13 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
             walls.append((points, normals))
         box = np.concatenate([x[0] for x in walls], axis=0)
         box_normals = np.concatenate([x[1] for x in walls], axis=0)
+        print(f"Box shape: {box.shape}, Normals shape: {box_normals.shape}")
         # prepare fluids
         for x in scene['fluids']:
             if 'h5_path' in x and os.path.exists(x['h5_path']):
-                data = read_pos_vel_from_h5(x['h5_path'])
-                points, velocities = data[0], data[1]
-                # 检查是否读取了相体积分数
-                phase_fractions = data[2] if len(data) > 2 else None
+                data, cd, cf, h5_scene_props = read_pos_vel_from_h5(x['h5_path'])
+                _, _, points, velocities, phase_fractions = data
+                print(f"load fluid data from h5: Fluid shape: {points.shape}, Velocity shape: {velocities.shape}, Phase fractions shape: {phase_fractions.shape}")
             if 'ply_path' in x:
                 points, _ = read_pos_normal_from_ply(x['ply_path'])
                 velocities = np.empty_like(points)
@@ -238,6 +254,7 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                 velocities[:, 1] = x['velocity'][1]
                 velocities[:, 2] = x['velocity'][2]
                 phase_fractions = None
+                print(f"load fluid data from ply: Fluid shape: {points.shape}, Velocity shape: {velocities.shape}, Phase fractions shape: {phase_fractions.shape if phase_fractions is not None else 'None'}")
             else:
                 points = obj_volume_to_particles(x['path'])[0]
                 points += np.asarray([x['translation']], dtype=np.float32)
@@ -245,12 +262,8 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                 velocities[:, 0] = x['velocity'][0]
                 velocities[:, 1] = x['velocity'][1]
                 velocities[:, 2] = x['velocity'][2]
-                # 如果配置中指定了相体积分数，使用它
                 phase_fractions = None
-                if 'phase_fractions' in x:
-                    num_phases = len(x['phase_fractions'])
-                    phase_fractions = np.zeros((points.shape[0], num_phases), dtype=np.float32)
-
+            
             range_ = range(x['start'], x['stop'], x['step'])
             fluids.append((points, velocities, phase_fractions, cd, cf, range_))
     
@@ -278,25 +291,27 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                         fluid_phases[:, 1] = 1
                 phase_fractions = np.concatenate([phase_fractions, fluid_phases], axis=0)
                 print('add', pos.shape, vel.shape, phase_fractions.shape)
+                print('current phases: ', phase_fractions[::100])
 
-        if pos.shape[0]:
+        if pos.shape[0] > 0:
             fluid_output_path = os.path.join(output_dir,
                                              'fluid_{0:04d}'.format(step))
-            if isinstance(pos, np.ndarray):
-                write_particles(fluid_output_path, pos, vel, phase_fractions, options)
-            else:
-                write_particles(fluid_output_path, pos.numpy(), vel.numpy(), phase_fractions.numpy(), options)
+            write_particles(fluid_output_path, pos, vel, phase_fractions, options)
 
-            # 准备输入，包含相体积分数
-            inputs = (pos, vel, phase_fractions, box, box_normals)
+            # 准备模型输入
+            inputs = (tf.constant(pos), tf.constant(vel), tf.constant(phase_fractions), 
+                      tf.constant(box), tf.constant(box_normals))
             
-            # 调用模型执行一步仿真，根据模型输出处理返回结果
-            if phase_fractions is not None and hasattr(model, 'num_phases') and model.num_phases > 1:
-                # 执行多相流体模拟
-                pos, vel, phase_fractions = model(inputs, cd=cd, cf=cf)
-            else:
-                # 执行单相流体模拟
-                pos, vel = model(inputs)
+            pos_tensor, vel_tensor, phase_fractions_tensor = model(
+                inputs,
+                phase_densities=tf.constant(scene_phase_densities, dtype=tf.float32),
+                cd=tf.constant(cd, dtype=tf.float32),
+                cf=tf.constant(cf, dtype=tf.float32),
+                training=False
+            )
+
+            # 将输出转换回 numpy 数组以进行下一步处理
+            pos, vel, phase_fractions = pos_tensor.numpy(), vel_tensor.numpy(), phase_fractions_tensor.numpy()
 
         # remove out of bounds particles
         if step % 10 == 0:
@@ -310,9 +325,10 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                     phase_fractions = phase_fractions[mask]
 
     end_time = time.time()  
-    print('Total time: ', end_time - start_time)
-    print('average time: ', (end_time - start_time) / num_steps)
-
+    total_time = end_time - start_time
+    avg_time = total_time / num_steps if num_steps > 0 else 0
+    print(f'Total time: {total_time:.2f}s')
+    print(f'Average time per step: {avg_time:.4f}s')
 
 def main():
     parser = argparse.ArgumentParser(

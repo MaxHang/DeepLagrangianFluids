@@ -93,6 +93,22 @@ class H5PhysicsDataFlow(dataflow.RNGDataFlow):
                 # 读取CD和CF参数
                 sample['cd'] = np.float32(h5f.attrs['cd'])
                 sample['cf'] = np.float32(h5f.attrs['cf'])
+
+                try:
+                    # 获取并转换 num_phases 属性
+                    num_phases = h5f.attrs.get('num_phases', 2)
+                    sample['num_phases'] = np.int32(num_phases)
+                    
+                    # 获取并转换 density 属性
+                    density = h5f.attrs.get('density', [1000.0, 1000.0])
+                    sample['density'] = np.array(density, dtype=np.float32)
+                    
+                except (KeyError, ValueError, TypeError) as e:
+                    print(f"警告: 属性读取或转换失败，使用默认值: {e}")
+                    
+                    # 确保所有字段都有默认值
+                    sample['num_phases'] = np.int32(2)
+                    sample['density'] = np.float32([1000.0, 1000.0])
                 
                 # 读取每个时间步的数据
                 for time_i, frame_id in enumerate(frame_ids):

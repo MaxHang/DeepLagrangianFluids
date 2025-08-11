@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # 定义变量, 批量处理文件夹
-RUN_SCRIPT="scripts/run_mix_spearate_pos_phase.py"
-TRAIN_SCRIPT="scripts/train_network_mix_tf_spearate_pos_phase.py"
-YAML_FILE="scripts_mix/mix_separate_pos_phase.yaml"
+RUN_SCRIPT="scripts/run_mix_v1.py"
+TRAIN_SCRIPT="scripts/train_mix_v2.py"
+YAML_FILE="scripts_mix_it_dens_cd_cf/mix_v2_sum.yaml"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
-LOG_FILE="scripts_mix/run_mix_spearate_pos_phase_${DATE}.log"  # 定义日志文件名，包含日期和时间
-SCENE="scripts_mix/canyon_scene.json"
-OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_${DATE}"
+LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v2_sum_${DATE}.log"  # 定义日志文件名，包含日期和时间
+SCENE="scripts_mix_it_dens_cd_cf/run_mixfluid_valid.json"
+OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_it_dens_cd_cf/sum_${DATE}"
 # NUMSTEPS=2000
 NUMSTEPS=2000
 GPU_ID="0"  # 默认使用GPU 0
-WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_separate_pos_phase/train_network_mix_tf_spearate_pos_phase_mix_separate_pos_phase_20250616/checkpoints/ckpt-30000.index"
+WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/phases2_sum_20250804/model_weights_2025_08_06.h5"
 
 # 检查输入参数
 if [ "$#" -ge 1 ]; then

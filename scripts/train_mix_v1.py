@@ -4,7 +4,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 # Assuming evaluate_mix_network is adapted for the new model output
 # 假设 evaluate_mix_network 已经适配了新的模型输出
-from evaluate_mix_spearate_pos_phase import evaluate_tf as evaluate
+from scripts.evaluate_mix_spearate_pos_phase_v1 import evaluate_tf as evaluate
 from utils.deeplearningutilities.tf import Trainer, MyCheckpointManager
 import tensorflow as tf
 from datetime import date
@@ -19,6 +19,7 @@ import argparse
 import yaml
 
 _k = 1000
+# _k = 10
 
 TrainParams = namedtuple('TrainParams', ['max_iter', 'base_lr', 'batch_size'])
 # Default values, can be overridden by cfg
@@ -43,7 +44,7 @@ def create_model(gpu_id=0, **kwargs): # Receives model_config # 接收 model_con
                 # 目前，仅打印并继续（希望CPU能工作或用户注意到）
     # Ensure the import path is correct
     # 确保导入路径正确
-    from models.default_tf_mix_separate_pos_phase import MultiPhaseParticleNetwork
+    from models.default_tf_mix_separate_pos_phase_v1 import MultiPhaseParticleNetwork
     """Returns an instance of the network for training and evaluation"""
     model = MultiPhaseParticleNetwork(**kwargs)
     return model
@@ -153,62 +154,28 @@ def main():
 
     # Allow choosing loss type
     # 允许选择损失类型
-    def volume_fraction_loss(pr_vol, gt_vol, importance=None, loss_type='mse'):
-        """Calculates volume fraction loss."""
-        # Ensure inputs are float32
-        # 确保输入是float32
-        pr_vol = tf.cast(pr_vol, tf.float32)
-        gt_vol = tf.cast(gt_vol, tf.float32)
-        # Increased epsilon for KL
-        # 为KL增加epsilon
-        epsilon = 1e-7
+    def volume_fraction_loss(pr_vol, gt_vol, current_num_phases, importance=None, loss_type='mse'):
+            pr_vol = tf.cast(pr_vol, tf.float32)
+            gt_vol = tf.cast(gt_vol, tf.float32)
+            epsilon = 1e-7
 
-        if loss_type == 'kl_divergence':
-            # KLD expects y_true, y_pred. Reshape if necessary.
-            # KLD期望y_true, y_pred。如果需要，进行重塑。
-            # Assuming pr_vol and gt_vol are [batch, particles, num_phases]
-            # 假设pr_vol和gt_vol是[batch, particles, num_phases]
-            # We want to calculate per-particle KL divergence then average
-            # 我们想要计算每个粒子的KL散度然后取平均
-            kl_div = tf.keras.losses.KLDivergence()
-            # Flatten batch & particles
-            # 展平批次和粒子维度
-            num_particles_dim = tf.shape(gt_vol)[-2] # Assuming second to last is num_particles # 假设倒数第二个是num_particles
-            error_per_particle = kl_div(
-                tf.reshape(gt_vol, [-1, model.num_phases]),
-                tf.reshape(pr_vol, [-1, model.num_phases])
-            )
-            # Reshape back
-            # 重塑回去
-            error = tf.reshape(error_per_particle, [-1, num_particles_dim])
-
-        elif loss_type == 'mse':
-            error = tf.reduce_mean(tf.square(pr_vol - gt_vol), axis=-1)
-        elif loss_type == 'mae':
-            error = tf.reduce_mean(tf.abs(pr_vol - gt_vol), axis=-1)
-        else: # Your combined loss # 你的组合损失
-            l1_loss = tf.abs(pr_vol - gt_vol)
-            gt_safe = tf.clip_by_value(gt_vol, epsilon, 1.0 - epsilon)
-            pr_safe = tf.clip_by_value(pr_vol, epsilon, 1.0 - epsilon)
-            # Careful with log(0) or log(>1) if not properly clipped for (1-p) terms
-            # 小心log(0)或log(>1)，如果(1-p)项没有正确裁剪
-            term1 = gt_safe * tf.math.log(gt_safe / pr_safe)
-            term2 = (1.0 - gt_safe) * tf.math.log((1.0 - gt_safe) / (1.0 - pr_safe))
-            # This is per-phase, then sum
-            # 这是每相的，然后求和
-            kl_like_loss = term1 + term2
+            if loss_type == 'kl_divergence':
+                kl_div = tf.keras.losses.KLDivergence()
+                # 展平批次和粒子维度，但保留相维度
+                num_particles_dim = tf.shape(gt_vol)[-2]
+                # model.num_phases 不再存在，我们使用传入的 current_num_phases
+                error_per_particle = kl_div(
+                    tf.reshape(gt_vol, [-1, current_num_phases]),
+                    tf.reshape(pr_vol, [-1, current_num_phases])
+                )
+                error = tf.reshape(error_per_particle, [-1, num_particles_dim])
+            else: # 默认使用 MSE，其他复杂损失可以类似地修改
+                error = tf.reduce_mean(tf.square(pr_vol - gt_vol), axis=-1)
             
-            # Sum over phases
-            # 对各相求和
-            combined_loss = tf.reduce_sum(l1_loss + 0.1 * kl_like_loss, axis=-1)
-            # error is now [batch, particles]
-            # error现在是[batch, particles]
-            error = combined_loss
-
-        if importance is not None:
-            importance = tf.cast(importance, tf.float32)
-            return tf.reduce_mean(importance * error)
-        return tf.reduce_mean(error)
+            if importance is not None:
+                importance = tf.cast(importance, tf.float32)
+                return tf.reduce_mean(importance * error)
+            return tf.reduce_mean(error)
 
     # Get loss weights from config
     # 从配置中获取损失权重
@@ -217,7 +184,7 @@ def main():
     # 例如 'mse', 'kl_divergence', 'combined'
     vf_loss_type = cfg.get('loss_vf_type', 'mse')
 
-    def loss_fn(pr_pos, gt_pos, pr_vol=None, gt_vol=None, num_fluid_neighbors=None):
+    def loss_fn(pr_pos, gt_pos, pr_vol, gt_vol, current_num_phases, num_fluid_neighbors=None):
         gamma = tf.cast(loss_weights.get('gamma', 0.5), tf.float32)
         # Default neighbor_scale if num_fluid_neighbors is None or not effective
         # 如果num_fluid_neighbors为None或无效，则使用默认的neighbor_scale
@@ -232,24 +199,18 @@ def main():
             # train()中的每批次项处理意味着num_fluid_neighbors是[num_particles]
             # So importance should also be [num_particles]
             # 所以importance也应该是[num_particles]
-             dummy_particle_dim_shape = tf.shape(pr_pos)[0] # Assuming pr_pos is [particles_in_sample, 3] # 假设pr_pos是[样本中的粒子数, 3]
-             importance = tf.ones(shape=(dummy_particle_dim_shape,), dtype=tf.float32)
-
+            dummy_particle_dim_shape = tf.shape(pr_pos)[0] # Assuming pr_pos is [particles_in_sample, 3] # 假设pr_pos是[样本中的粒子数, 3]
+            importance = tf.ones(shape=(dummy_particle_dim_shape,), dtype=tf.float32)
 
         pos_loss_val = tf.reduce_mean(importance * tf.pow(euclidean_distance(pr_pos, gt_pos), gamma))
 
         total_loss = loss_weights.get('pos', 1.0) * pos_loss_val
 
-        if model.num_phases > 1 and pr_vol is not None and gt_vol is not None:
+        if pr_vol is not None and gt_vol is not None:
             # For now, assume gt_vol is also [particles, num_phases]
             # 目前，假设gt_vol也是[particles, num_phases]
-            vol_loss_val = volume_fraction_loss(pr_vol, gt_vol, importance, loss_type=vf_loss_type)
+            vol_loss_val = volume_fraction_loss(pr_vol, gt_vol, current_num_phases, importance, loss_type=vf_loss_type)
             total_loss += loss_weights.get('vol', 1.0) * vol_loss_val
-        
-        # Add stability loss here if implemented
-        # 如果实现，在此处添加稳定性损失
-        # stability_loss_val = calculate_stability_loss(...)
-        # total_loss += loss_weights.get('stability', 0.1) * stability_loss_val
 
         return total_loss
 
@@ -276,57 +237,43 @@ def main():
                 # 用于2步预测
                 gt_pos2 = current_batch['pos2'][i]
 
-                # Phase fractions - ensure shape is [particles, num_phases]
-                # 相分数 - 确保形状为[particles, num_phases]
-                current_vf0 = None
-                gt_vf1 = None
-                gt_vf2 = None
-                if model_instance.num_phases > 1:
-                    if 'phase_fractions0' in current_batch and current_batch['phase_fractions0']:
-                        current_vf0 = current_batch['phase_fractions0'][i]
-                    if 'phase_fractions1' in current_batch and current_batch['phase_fractions1']:
-                        gt_vf1 = current_batch['phase_fractions1'][i]
-                    if 'phase_fractions2' in current_batch and current_batch['phase_fractions2']:
-                        gt_vf2 = current_batch['phase_fractions2'][i]
-                    
-                    # Fallback if GT VFs for next steps are missing (e.g. for stability loss later)
-                    # 如果后续步骤的GT VF缺失，则回退（例如，用于稍后的稳定性损失）
-                    if gt_vf1 is None and current_vf0 is not None: gt_vf1 = current_vf0 
-                    if gt_vf2 is None and gt_vf1 is not None: gt_vf2 = gt_vf1
+                ## V4-MOD: 从批次中获取动态参数
+                # 假设数据集读取器现在会返回 'num_phases' 和 'density'
+                current_num_phases_sample = current_batch['num_phases'][i]
+                phase_densities_sample = current_batch['density'][i]
+                # 获取体积分数
+                current_vf0 = current_batch.get('phase_fractions0', [None]*train_params.batch_size)[i]
+                gt_vf1 = current_batch.get('phase_fractions1', [None]*train_params.batch_size)[i]
+                gt_vf2 = current_batch.get('phase_fractions2', [None]*train_params.batch_size)[i]
 
-
-                # Cd and Cf for this sample
-                # 此样本的Cd和Cf
-                # Default if not in batch
-                # 如果不在批次中则使用默认值
-                cd_sample = current_batch.get('cd', 0.5)
-                if isinstance(cd_sample, (list, tf.Tensor, np.ndarray)):
-                    cd_val = tf.cast(cd_sample[i], dtype=tf.float32) if len(cd_sample) > i else tf.constant(0.5, dtype=tf.float32)
-                else:
-                    cd_val = tf.cast(cd_sample, dtype=tf.float32)
-
-                cf_sample = current_batch.get('cf', 0.5) # Default if not in batch
-                if isinstance(cf_sample, (list, tf.Tensor, np.ndarray)):
-                    cf_val = tf.cast(cf_sample[i], dtype=tf.float32) if len(cf_sample) > i else tf.constant(0.5, dtype=tf.float32)
-                else:
-                    cf_val = tf.cast(cf_sample, dtype=tf.float32)
-
+                # 获取 Cd 和 Cf
+                cd_val = tf.cast(current_batch.get('cd', [0.5]*train_params.batch_size)[i], tf.float32)
+                cf_val = tf.cast(current_batch.get('cf', [0.5]*train_params.batch_size)[i], tf.float32)
 
                 # --- First prediction step ---
                 # --- 第一个预测步骤 ---
                 inputs1 = (pos0, vel0, current_vf0, box_pos_sample, box_normals_sample)
-                pr_pos1, pr_vel1, pr_vf1 = model_instance(inputs1, training=True, cd=cd_val, cf=cf_val)
+                pr_pos1, pr_vel1, pr_vf1 = model_instance(
+                    inputs1, 
+                    current_num_phases = current_num_phases_sample,
+                    phase_densities=phase_densities_sample,
+                    training=True, cd=cd_val, cf=cf_val
+                )
                 
-                loss1 = loss_fn(pr_pos1, gt_pos1, pr_vf1, gt_vf1, model_instance.num_fluid_neighbors)
+                loss1 = loss_fn(pr_pos1, gt_pos1, pr_vf1, gt_vf1, current_num_phases_sample, model_instance.num_fluid_neighbors)
                 
                 # --- Second prediction step ---
                 # --- 第二个预测步骤 ---
                 # Use predicted as input
                 # 使用预测值作为输入
                 inputs2 = (pr_pos1, pr_vel1, pr_vf1, box_pos_sample, box_normals_sample)
-                pr_pos2, pr_vel2, pr_vf2 = model_instance(inputs2, training=True, cd=cd_val, cf=cf_val)
+                pr_pos2, pr_vel2, pr_vf2 = model_instance(
+                    inputs2, 
+                    current_num_phases=current_num_phases_sample,
+                    phase_densities=phase_densities_sample,
+                    training=True, cd=cd_val, cf=cf_val)
 
-                loss2 = loss_fn(pr_pos2, gt_pos2, pr_vf2, gt_vf2, model_instance.num_fluid_neighbors)
+                loss2 = loss_fn(pr_pos2, gt_pos2, pr_vf2, gt_vf2, current_num_phases_sample, model_instance.num_fluid_neighbors)
                 
                 accumulated_losses.append(0.5 * loss1 + 0.5 * loss2)
 
@@ -369,31 +316,31 @@ def main():
         for k in ('pos0', 'vel0', 'pos1', 'pos2', 'box', 'box_normals'):
             if k in batch_from_dataset:
                 batch_tf[k] = [tf.convert_to_tensor(x, dtype=tf.float32) for x in batch_from_dataset[k]]
+
+        ## V4-MOD: 从数据集中获取新的动态参数
+        if 'num_phases' in batch_from_dataset:
+            batch_tf['num_phases'] = [tf.constant(x, dtype=tf.int32) for x in batch_from_dataset['num_phases']]
+        if 'density' in batch_from_dataset:
+            batch_tf['density'] = [tf.constant(x, dtype=tf.float32) for x in batch_from_dataset['density']]
         
-        # Phase fractions
-        # 相分数
-        # Ensure phase_fractionsX has shape [particles, num_phases] for each item in batch list
-        # 确保批次列表中每个项目的phase_fractionsX形状为[particles, num_phases]
-        num_model_phases = model.num_phases
+        # 处理体积分数
         for k_vf_idx in range(3): # For phase_fractions0, 1, 2 # 对于phase_fractions0, 1, 2
             k_vf = f'phase_fractions{k_vf_idx}'
             if k_vf in batch_from_dataset:
-                # Convert to tensor and ensure correct shape [particles, num_phases]
-                # 转换为张量并确保正确的形状[particles, num_phases]
                 processed_vf_list = []
-                for vf_sample_np in batch_from_dataset[k_vf]:
+                for i, vf_sample_np in enumerate(batch_from_dataset[k_vf]):
                     vf_sample_tf = tf.convert_to_tensor(vf_sample_np, dtype=tf.float32)
-                    # If dataset provides N-1 phases, construct the Nth phase
-                    # 如果数据集提供N-1个相，则构造第N个相
-                    if vf_sample_tf.shape[-1] == num_model_phases - 1 and num_model_phases > 1:
-                        last_phase = 1.0 - tf.reduce_sum(vf_sample_tf, axis=-1, keepdims=True)
-                        # Ensure valid
-                        # 确保有效
-                        last_phase = tf.clip_by_value(last_phase, 0.0, 1.0)
-                        vf_sample_tf = tf.concat([vf_sample_tf, last_phase], axis=-1)
-                    elif vf_sample_tf.shape[-1] != num_model_phases and num_model_phases > 1:
-                         raise ValueError(f"Shape mismatch for {k_vf}: expected {num_model_phases} phases, "
-                                          f"got {vf_sample_tf.shape[-1]}. Sample shape: {vf_sample_tf.shape}")
+                    ## V4-MOD: 移除不安全的 'N-1' 相重建逻辑。现在我们进行验证。
+                    # 确保数据集提供的体积分数维度与它声称的相数相匹配
+                    num_phases_for_sample = batch_from_dataset['num_phases'][i]
+                    if vf_sample_tf.shape[-1] != num_phases_for_sample:
+                        raise ValueError(
+                            f"Shape mismatch for sample {i} in {k_vf}: "
+                            f"dataset claimed {num_phases_for_sample} phases, "
+                            f"but phase_fractions tensor has shape {vf_sample_tf.shape}. "
+                            "Please ensure your dataset reader provides the correct number of phases and "
+                            "the full phase fraction data for each sample."
+                        )
                     processed_vf_list.append(vf_sample_tf)
                 batch_tf[k_vf] = processed_vf_list
         

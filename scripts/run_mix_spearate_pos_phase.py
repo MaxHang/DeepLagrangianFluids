@@ -77,12 +77,6 @@ def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, optio
     """Writes the particles as point cloud ply.
     Optionally writes particles as bgeo which also supports velocities.
     """
-    arrs = {'pos': pos}
-    if vel is not None:
-        arrs['vel'] = vel
-    if phase_fractions is not None:
-        arrs['phase_fractions'] = phase_fractions
-    np.savez(path_without_ext + '.npz', **arrs)
 
     if options and options.write_ply:
         # 准备需要写入到PLY的数据
@@ -276,27 +270,33 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
                         fluid_phases[:, 0] = 1
                     else:
                         fluid_phases[:, 1] = 1
+                    # if step % 8 == 0:
+                    #     fluid_phases[:, 1] = 1
+                    # else:
+                    #     fluid_phases[:, 0] = 1
                 phase_fractions = np.concatenate([phase_fractions, fluid_phases], axis=0)
                 print('add', pos.shape, vel.shape, phase_fractions.shape)
 
-        if pos.shape[0]:
+        if pos.shape[0] > 0:
             fluid_output_path = os.path.join(output_dir,
                                              'fluid_{0:04d}'.format(step))
-            if isinstance(pos, np.ndarray):
-                write_particles(fluid_output_path, pos, vel, phase_fractions, options)
-            else:
-                write_particles(fluid_output_path, pos.numpy(), vel.numpy(), phase_fractions.numpy(), options)
-
+            write_particles(fluid_output_path, pos, vel, phase_fractions, options)
+            
             # 准备输入，包含相体积分数
-            inputs = (pos, vel, phase_fractions, box, box_normals)
+            inputs = (tf.constant(pos), tf.constant(vel), tf.constant(phase_fractions), 
+                      tf.constant(box), tf.constant(box_normals))
             
             # 调用模型执行一步仿真，根据模型输出处理返回结果
-            if phase_fractions is not None and hasattr(model, 'num_phases') and model.num_phases > 1:
-                # 执行多相流体模拟
-                pos, vel, phase_fractions = model(inputs, cd=cd, cf=cf)
-            else:
-                # 执行单相流体模拟
-                pos, vel = model(inputs)
+            # 执行多相流体模拟
+            pos_tensor, vel_tensor, phase_fractions_tensor = model(
+                inputs, 
+                cd=tf.constant(cd, dtype=tf.float32),
+                cf=tf.constant(cf, dtype=tf.float32),
+                training=False
+            )
+
+            # 将输出转换回 numpy 数组以进行下一步处理
+            pos, vel, phase_fractions = pos_tensor.numpy(), vel_tensor.numpy(), phase_fractions_tensor.numpy()
 
         # remove out of bounds particles
         if step % 10 == 0:

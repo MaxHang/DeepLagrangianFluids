@@ -1,6 +1,7 @@
 """
 调试工具模块，用于控制 print 输出
 """
+import tensorflow as tf
 
 # 调试模式开关
 DEBUG_MODE = True
@@ -43,10 +44,10 @@ def debug_print(*args, **kwargs):
     if max_prints is None or print_counters[caller_id] <= max_prints:
         # 添加计数信息
         if max_prints is not None:
-            print(
+            tf.print(
                 f"[DEBUG {print_counters[caller_id]}/{max_prints}]", *args, **kwargs)
         else:
-            print(f"[DEBUG {print_counters[caller_id]}]", *args, **kwargs)
+            tf.print(f"[DEBUG {print_counters[caller_id]}]", *args, **kwargs)
 
 
 def set_debug_mode(enabled=True):

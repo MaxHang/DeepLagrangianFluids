@@ -71,7 +71,6 @@ class H5PhysicsDataFlow(dataflow.RNGDataFlow):
                 # 获取边界数据
                 box = h5f['box'][:]
                 box_normals = h5f['box_normals'][:]
-                density = h5f[f'frames/{frame_ids[0]}/rest_density'][:]
 
                 # 准备随机旋转矩阵
                 if self.random_rotation:
@@ -91,7 +90,9 @@ class H5PhysicsDataFlow(dataflow.RNGDataFlow):
                     }
                 else:
                     sample = {'box': box, 'box_normals': box_normals}
-                sample['density'] = density
+
+                density = h5f[f'frames/{frame_ids[0]}/rest_density'][:]
+                sample['density'] = density # 每个时间步的密度不会改变（不混溶），故在循环外面设置
 
                 # 读取每个时间步的数据
                 for time_i, frame_id in enumerate(frame_ids):
