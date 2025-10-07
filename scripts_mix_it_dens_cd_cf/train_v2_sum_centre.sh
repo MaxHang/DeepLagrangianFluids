@@ -2,10 +2,9 @@
 
 # 定义变量, 批量处理文件夹
 TRAIN_SCRIPT="scripts/train_mix_v2.py"
-YAML_FILE="scripts_mix_it_dens_cd_cf/mix_v2_2025.yaml"
+YAML_FILE="scripts_mix_it_dens_cd_cf/mix_v2_sum_centre.yaml"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
-LOG_FILE="scripts_mix_it_dens_cd_cf/log_train/train_v2_mean_centre_${DATE}.log"  # 定义日志文件名，包含日期和时间
-# LOG_FILE="scripts_mix_it_dens_cd_cf/log_train/train_v2_sum_centre_${DATE}.log"  # 定义日志文件名，包含日期和时间
+LOG_FILE="scripts_mix_it_dens_cd_cf/log_train/train_v2_sum_centre_${DATE}.log"  # 定义日志文件名，包含日期和时间
 
 GPU_ID="0"  # 默认使用GPU 0
 

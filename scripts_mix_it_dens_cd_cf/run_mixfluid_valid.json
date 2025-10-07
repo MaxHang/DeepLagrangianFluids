@@ -1,8 +1,8 @@
 {
     "h5_path.bak1": "/workspace/xyh_synology/graduate/datasets/mix-it-dens-cd-cf/valid/cd_0.29_cf_0.83_density_1000_3000.h5",
     "h5_path.bak2": "/workspace/xyh_synology/graduate/datasets/mix-it-dens-cd-cf/valid/cd_0.0_cf_1.0_density_2000_3000.h5",
-    "h5_path.bak3": "/workspace/xyh_synology/graduate/datasets/mix-it-dens-cd-cf/train/cd_0.0_cf_0.01_density_1500_3000.h5",
-    "h5_path": "/workspace/xyh_synology/graduate/datasets/mix-it-dens-cd-cf/valid/cd_1.0_cf_0.01_density_800_1500.h5",
+    "h5_path": "/workspace/xyh_synology/graduate/datasets/mix-it-dens-cd-cf/train/cd_0.0_cf_0.01_density_1500_3000.h5",
+    "h5_path.bak3": "/workspace/xyh_synology/graduate/datasets/mix-it-dens-cd-cf/valid/cd_1.0_cf_0.01_density_800_1500.h5",
     "walls": [
         {
             "path": "/workspace/DeepLagrangianFluids/datasets/models/Box.obj",
