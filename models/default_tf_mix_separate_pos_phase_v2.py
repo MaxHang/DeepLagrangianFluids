@@ -357,36 +357,6 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         
         return vf_next_normalized_padded
 
-    # # 再次提供最关键的修复代码，请务必替换
-    # def compute_next_phase_fractions(self, current_phase_fractions_padded, delta_logits_padded, current_num_phases):
-    #     # 1. 创建只在有效区域为 1.0 的掩码
-    #     mask_range = tf.range(self.max_num_phases, dtype=tf.int32)
-    #     phase_mask = mask_range < current_num_phases
-    #     phase_mask_float = tf.cast(tf.broadcast_to(phase_mask, tf.shape(current_phase_fractions_padded)), dtype=tf.float32)
-
-    #     # 2. 安全地计算 current_logits
-    #     vf_safe = current_phase_fractions_padded + 1e-8
-    #     debug_print("vf_safe 1000: \n", vf_safe[::1000])
-    #     log_vf = tf.math.log(vf_safe)
-    #     debug_print("log_vf 1000: \n", log_vf[::1000])
-    #     current_logits = log_vf * phase_mask_float # 只保留有效区域的log值
-
-    #     # 3. 安全地计算 next_logits
-    #     next_logits_padded = current_logits + (delta_logits_padded * phase_mask_float) # 只在有效区域加delta
-
-    #     # 4. 应用 Softmax 掩码
-    #     softmax_mask = tf.where(phase_mask, 0.0, -1e9)
-    #     masked_logits = next_logits_padded + softmax_mask
-        
-    #     # 5. 应用 Softmax
-    #     next_fractions_padded = tf.nn.softmax(masked_logits, axis=-1)
-        
-    #     # 6. 确保填充区严格为零
-    #     final_fractions_padded = next_fractions_padded * phase_mask_float
-        
-    #     return final_fractions_padded
-    
-    # --- 辅助方法（与原始代码或V1-V3版本一致） ---
 
     def integrate_pos_vel(self, pos1, vel1):
         dt = self.timestep

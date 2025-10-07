@@ -35,9 +35,20 @@ def create_model(gpu_id=0, **kwargs): # Receives model_config # 接收 model_con
     if gpu_id is not None:
         gpus = tf.config.list_physical_devices('GPU')
         if gpus:
+            # --- [核心修改] ---
+            # 检查传入的 gpu_id 是否在 TensorFlow 可见的 GPU 列表范围内
+            if gpu_id >= len(gpus):
+                print(f"[WARNING] Requested GPU ID {gpu_id} is out of range. TensorFlow sees {len(gpus)} GPU(s).")
+                print(f"[WARNING] This might be because CUDA_VISIBLE_DEVICES is set.")
+                print(f"[WARNING] Defaulting to the first available GPU: {gpus[0].name}")
+                # 默认使用列表中的第一个 (也就是唯一可见的那个)
+                target_gpu = gpus[0]
+            else:
+                target_gpu = gpus[gpu_id]
+            # --- [修改结束] ---
             try:
-                tf.config.set_visible_devices(gpus[gpu_id], 'GPU')
-                tf.config.experimental.set_memory_growth(gpus[gpu_id], True)
+                tf.config.set_visible_devices(target_gpu, 'GPU')
+                tf.config.experimental.set_memory_growth(target_gpu, True)
                 print(f"Using GPU {gpu_id}")
             except RuntimeError as e:
                 print(f"Error setting up GPU: {e}")
