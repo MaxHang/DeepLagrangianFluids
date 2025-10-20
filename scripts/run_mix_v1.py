@@ -82,7 +82,7 @@ def read_pos_vel_from_h5(path, random_rotation=False):
     scene_props = {'num_phases': num_phases, 'density': density}
     return [box, box_normals, pos, vel, phase_fractions], cd, cf, scene_props
 
-def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, options=None):
+def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, options=None, cd=None, cf=None, densities=None):
     """Writes the particles as point cloud ply.
     Optionally writes particles as bgeo which also supports velocities.
     """
@@ -161,17 +161,25 @@ def write_particles(path_without_ext, pos, vel=None, phase_fractions=None, optio
                      dtype=[(name, data.dtype.str) for name, data in vertex_data]),
             'vertex'
         )
+
+        comments = []
+        if cd is not None:
+            comments.append(f"cd: {float(cd):.6g}")
+        if cf is not None:
+            comments.append(f"cf: {float(cf):.6g}")
+        if densities is not None:
+            dens_arr = np.array(densities, dtype=np.float32).ravel()
+            comments.append("dens: " + ",".join([f"{x:.6g}" for x in dens_arr]))
         
         # 创建PLY文件
-        ply_data = plyfile.PlyData([vertex_element], text=True)
-        
+        ply_data = plyfile.PlyData([vertex_element], comments=comments, text=True)
+
         # 写入PLY文件
         ply_data.write(path_without_ext + '.ply')
 
     if options and options.write_bgeo:
         # 注意：bgeo格式可能不支持相体积分数，只写入位置和速度
         write_bgeo_from_numpy(path_without_ext + '.bgeo', pos, vel)
-
 
 def read_pos_normal_from_ply(path):
     """Load ply files from specified path."""
@@ -314,7 +322,7 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
 
         if pos.shape[0] > 0:
             fluid_output_path = os.path.join(output_dir, f'fluid_{step:04d}')
-            write_particles(fluid_output_path, pos, vel, phase_fractions, options)
+            write_particles(fluid_output_path, pos, vel, phase_fractions, options, cd=cd, cf=cf, densities=scene_phase_densities)
 
             # 准备模型输入
             inputs = (tf.constant(pos), tf.constant(vel), tf.constant(phase_fractions), 

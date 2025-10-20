@@ -97,16 +97,69 @@ class MyCheckpointManager:
                 except:
                     print('Failed to remove file', x, flush=True)
 
+    # def save(self, step):
+    #     """Always writes a checkpoint and cleans up old checkpoints."""
+    #     current_step = int(step)
+
+    #     prefix = '{0}-{1}'.format(self._checkpoint_prefix, current_step)
+    #     print('saving', prefix, flush=True)
+    #     self._checkpoint.write(prefix)
+    #     self._last_save_time = time.time()
+    #     self._all_steps_checkpoints.append((current_step, prefix))
+    #     self.sweep()
+
+    # def save_if_needed(self, step):
+    #     """Writes a checkpoint according to the parameters passed to the object ctor.
+
+    #     This function saves a snapshot if step is in the list of checkpoints 
+    #     that we want to keep or if the time passed since the last save is greater
+    #     than the save interval.
+
+    #     This function is intended to be called inside a training loop.
+    #     """
+    #     current_step = int(step)
+
+    #     now = time.time()
+    #     seconds_since_last_save = now - self._last_save_time
+
+    #     if current_step in self._keep_checkpoint_steps or seconds_since_last_save > self._save_interval_seconds:
+    #         self.save(current_step)
+
     def save(self, step):
         """Always writes a checkpoint and cleans up old checkpoints."""
         current_step = int(step)
-
         prefix = '{0}-{1}'.format(self._checkpoint_prefix, current_step)
-        print('saving', prefix, flush=True)
-        self._checkpoint.write(prefix)
-        self._last_save_time = time.time()
-        self._all_steps_checkpoints.append((current_step, prefix))
-        self.sweep()
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print('saving', prefix, flush=True)
+                self._checkpoint.write(prefix)
+                self._last_save_time = time.time()
+                self._all_steps_checkpoints.append((current_step, prefix))
+                self.sweep()
+                print(f'Checkpoint saved successfully: {prefix}', flush=True)
+                break  # 成功则跳出重试循环
+                
+            except Exception as e:
+                print(f'Failed to save checkpoint (attempt {attempt + 1}/{max_retries}')
+                
+                if attempt < max_retries - 1:
+                    # 删除可能损坏的文件
+                    corrupted_files = glob(f'{prefix}*')
+                    for corrupted_file in corrupted_files:
+                        try:
+                            os.remove(corrupted_file)
+                            print(f'Removed potentially corrupted file: {corrupted_file}')
+                        except Exception as rm_err:
+                            print(f'Could not remove {corrupted_file}: {rm_err}')
+                    
+                    time.sleep(2)  # 等待文件系统同步
+                    print(f'Retrying checkpoint save...')
+                else:
+                    # 所有重试都失败，记录错误但不中断训练
+                    print(f'All {max_retries} attempts failed for step {current_step}. Skipping this checkpoint.')
+                    print(f'WARNING: Checkpoint save failed at step {current_step}, training continues...', flush=True)
 
     def save_if_needed(self, step):
         """Writes a checkpoint according to the parameters passed to the object ctor.
@@ -123,4 +176,8 @@ class MyCheckpointManager:
         seconds_since_last_save = now - self._last_save_time
 
         if current_step in self._keep_checkpoint_steps or seconds_since_last_save > self._save_interval_seconds:
-            self.save(current_step)
+            try:
+                self.save(current_step)
+            except Exception as e:
+                # save() 内部已经处理了异常，这里再捕获一次作为最后的防线
+                print(f'Checkpoint save failed but training continues...', flush=True)
