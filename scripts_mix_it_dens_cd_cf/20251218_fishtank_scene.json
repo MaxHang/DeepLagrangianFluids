@@ -1,0 +1,61 @@
+{
+    "scene_properties": {
+        "num_phases": 2,
+        "density": [
+            1000.0,
+            3000.0
+        ],
+        "cd": 0.7,
+        "cf": 0.3,
+        "cf_seq": [
+            0.01,
+            0.3,
+            0.1
+        ]
+    },
+    "walls": [
+        {
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/fishtank_no_ceil_r0.05.ply",
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "invert_normals": false
+        }
+    ],
+    "fluids": [
+        {
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/faucet_left_r0.05.ply",
+            "velocity": [
+                6.0,
+                -1,
+                0
+            ],
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "start": 0,
+            "stop": 600,
+            "step": 6
+        },
+        {
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/faucet_right_r0.05.ply",
+            "velocity": [
+                -8.0,
+                -1,
+                0
+            ],
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "start": 0,
+            "stop": 600,
+            "step": 4
+        }
+    ]
+}

@@ -1,24 +1,34 @@
-# dataset_dir = "/datasets/cconv/ours_default_data"
-# from glob import glob
-# import os
-# # val_files = sorted(glob(os.path.join(dataset_dir, 'test', '*.zst')))
-# val_files = sorted(glob(os.path.join(dataset_dir, 'train', '*.zst')))
-# print(val_files)
+import tensorflow as tf
+import sys
+import os
 
-import h5py as h5py
-# file = "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1000_2000_box_1_cd_1.0_cf_0.0.h5"
-# with h5py.File(file, 'r') as f:
-#     print(f.keys())
-    
-#     print(f.attrs)
-#     for k, v in f.attrs.items():
-#         print(k, v)
-#     print(f["frames/1/rest_density"][0:10])
+print("="*50)
+print("Environment Verification")
+print("="*50)
+print(f"Python Version: {sys.version}")
+print(f"TensorFlow Version: {tf.__version__}")
+try:
+    print(f"Keras Version: {tf.keras.__version__}")
+except:
+    pass
 
+print("\n--- GPU Information ---")
+gpus = tf.config.list_physical_devices('GPU')
+print(f"Num GPUs Available: {len(gpus)}")
+for i, gpu in enumerate(gpus):
+    print(f"  GPU {i}: {gpu}")
 
-#
-a = range(0,401,400)
-print(a)
-for step in range(1200):
-    if step in a:
-        print(step)
+print("\n--- Build Information ---")
+print(f"Built with CUDA: {tf.test.is_built_with_cuda()}")
+print(f"Built with GPU support: {tf.test.is_built_with_gpu_support()}")
+
+try:
+    from tensorflow.python.platform import build_info as tf_build_info
+    print("\n--- CUDA/cuDNN Versions ---")
+    if hasattr(tf_build_info, 'build_info'):
+        print(f"Cuda Version: {tf_build_info.build_info.get('cuda_version', 'N/A')}")
+        print(f"Cudnn Version: {tf_build_info.build_info.get('cudnn_version', 'N/A')}")
+except Exception as e:
+    print(f"\nCould not retrieve detailed build info: {e}")
+
+print("="*50)

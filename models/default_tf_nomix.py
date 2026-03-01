@@ -4,7 +4,7 @@ import numpy as np
 from debug_utils import debug_print
 from utils.window_func import get_window_func
 from utils.convolutions import ContinuousConv
-from utils.multi_density_continuous_conv import MultiDensityContinuousConv
+from utils.multi_density_continuous_conv_2 import MultiDensityContinuousConv
 
 
 class MyParticleNetwork(tf.keras.Model):
@@ -36,7 +36,10 @@ class MyParticleNetwork(tf.keras.Model):
                  use_fluid_ones=True,          # 是否使用占位符 1 作为流体粒子特征
                  use_all_dens_condtition=False,
                  rest_dens=1000,
-                 circular=False):
+                 circular=False,
+                 # 🔥 新增: 密度条件化模式选择
+                 density_modulation_mode='density_ratio',  # 'density_ratio' 或 'pairwise_film'
+                 film_hidden_dim=16):
         super().__init__(name=type(self).__name__)
         self.layer_channels = [32, 64, 64, 3]
         self.kernel_size = kernel_size
@@ -71,6 +74,10 @@ class MyParticleNetwork(tf.keras.Model):
         self.density_embed = density_embed
         self.rest_dens = rest_dens
         self.use_all_dens_condtition = use_all_dens_condtition
+
+        # 🔥 新增: 存储密度条件化模式参数
+        self.density_modulation_mode = density_modulation_mode
+        self.film_hidden_dim = film_hidden_dim
 
         debug_print(f"particle_radius: {self.particle_radius}")
         debug_print(f"filter_extent: {self.filter_extent}")
@@ -284,7 +291,7 @@ class MyParticleNetwork(tf.keras.Model):
                 out_densities=density, # 输出点的密度 (流体密度)
             )
         else:
-             # 这个分支理论上不应该被执行，因为我们已经修改了 choose_conv_type
+             # 这个应该被执行，因为obstacle 是一个 ContinuousConv 层
             self.ans_conv0_obstacle = self.conv0_obstacle(
                 box_feats,
                 box,
@@ -426,6 +433,9 @@ class MyParticleNetwork(tf.keras.Model):
                 radius_search_ignore_query_points=ignore_query_points,
                 use_dense_layer_for_center=False,
                 circular=circular,
+                # 🔥 新增: 传递密度条件化模式参数
+                density_modulation_mode=self.density_modulation_mode,
+                film_hidden_dim=self.film_hidden_dim,
                 **kwargs
             )
         else:

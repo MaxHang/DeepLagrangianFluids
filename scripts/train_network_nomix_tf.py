@@ -6,7 +6,7 @@ from debug_utils import debug_print
 from evaluate_nomix_network import evaluate_tf as evaluate
 from utils.deeplearningutilities.tf import Trainer, MyCheckpointManager
 import tensorflow as tf
-from datetime import date
+from datetime import date, datetime
 import time
 from glob import glob
 from collections import namedtuple
@@ -14,6 +14,7 @@ from datasets.dataset_reader_h5_nomix import read_data_train, read_data_val
 import numpy as np
 import argparse
 import yaml
+import shutil
 
 # from evaluate_network import evaluate_tf as evaluate
 
@@ -43,7 +44,6 @@ def create_model(gpu_id=1, **kwargs):
     model = MyParticleNetwork(**kwargs)
     return model
 
-
 def main():
     parser = argparse.ArgumentParser(description="Training script")
     parser.add_argument("cfg",
@@ -60,18 +60,25 @@ def main():
 
     print("Training with config file: ", args.cfg)
 
-    with open(args.cfg, 'r') as f:
+    with open(args.cfg, 'r', encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
 
-        # the train dir stores all checkpoints and summaries. The dir name is the name of this file combined with the name of the config file
-    train_dir = os.path.splitext(
-        os.path.basename(__file__))[0] + '_' + os.path.splitext(
-            os.path.basename(args.cfg))[0] + date.today().strftime("_%Y_%m_%d")
+    if '2025' not in cfg['train_dir'] and '2026' not in cfg['train_dir']:      # 如果没有指定日期，则使用当前日期
+        # train_dir = os.path.join(cfg['train_dir'],  f"phases{max_phases}_zsg_{use_zero_sum_game}_centre{phase_feat_centralization}_{aggregation}" + date.today().strftime("_%Y%m%d"))
+        train_dir = os.path.join(cfg['train_dir'], datetime.now().strftime("%Y%m%d%H%M%S"))
+    else:
+        train_dir = cfg['train_dir']
 
     train_dir = os.path.join(cfg['train_dir'], train_dir)
 
     print("train_dir: ", train_dir)  # eg. train_network_tf_6kbox
     print("cfg[train_dir]: ", cfg["train_dir"])  # eg. model_weights.h5
+
+    os.makedirs(train_dir, exist_ok=True)
+    try:
+        shutil.copy2(args.cfg, os.path.join(train_dir, 'training_config.yaml'))
+    except Exception as e:
+        print(f"copy faild : {str(e)}")
 
     val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.h5')))
     train_files = sorted(

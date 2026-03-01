@@ -222,8 +222,8 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         # --- 3. 拼接最终特征 ---
         fluid_feats_list = [tf.ones_like(pos[:, 0:1]), vel, particle_phase_embedding]
         if self.cd_cf_as_input:
-            cd_scalar = kwargs.get('cd_scalar', 0.5)
-            cf_scalar = kwargs.get('cf_scalar', 0.5)
+            cd_scalar = kwargs.get('cd', 0.5)
+            cf_scalar = kwargs.get('cf', 0.5)
             cd_embed = self.cd_embedding_layer(tf.fill((tf.shape(pos)[0], 1), cd_scalar))
             cf_embed = self.cf_embedding_layer(tf.fill((tf.shape(pos)[0], 1), cf_scalar))
             fluid_feats_list.extend([cd_embed, cf_embed])

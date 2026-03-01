@@ -22,7 +22,7 @@ set -euo pipefail
 # --- 2. GPU 配置 ---
 #    在此处定义您希望用于并行评估的GPU ID列表。
 #    例如: AVAILABLE_GPUS=(0 1 2 3) for four GPUs
-AVAILABLE_GPUS=(0 1 2) 
+AVAILABLE_GPUS=(0) 
 NUM_GPUS=${#AVAILABLE_GPUS[@]}
 echo "[INFO] Starting parallel evaluation on ${NUM_GPUS} GPUs: ${AVAILABLE_GPUS[*]}"
 
@@ -30,34 +30,22 @@ echo "[INFO] Starting parallel evaluation on ${NUM_GPUS} GPUs: ${AVAILABLE_GPUS[
 SCRIPT_DIR="scripts"
 # 假设您的 train_mix_v3.py 和 evaluate.py 都需要指定 GPU ID
 # 我们需要修改 evaluate.py 让它能接收 --gpu 参数
-TRAIN_SCRIPT_PATH="${SCRIPT_DIR}/train_mix_v3.py"
-EVAL_SCRIPT_PATH="${SCRIPT_DIR}/evaluate_mix_20251008.py"
+TRAIN_SCRIPT_PATH="${SCRIPT_DIR}/train_mix_v5.py"
+EVAL_SCRIPT_PATH="${SCRIPT_DIR}/evaluate_mix_20251028.py"
 LOG_DIR="$(dirname "$0")/log_evaluation"
 mkdir -p "$LOG_DIR"
 
 # --- 4. 实验配置 (一一对应) ---
 MODELS_TO_TEST=(
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/phases5_centreTrue_mean_20250811/model_weights_2025_08_14.h5
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/phases5_centreTrue_sum_20250811/model_weights_2025_08_14.h5
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/train_mix_v2_mix_v2_20250731/model_weights_2025_08_02.h5
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/train_mix_v2_mix_v2_20250729/model_weights_2025_08_01.h5
-
-    # 20251020
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v3/phases5_zsg_True_centreTrue_sum_20251007/model_weights_2025_10_14.h5
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v3/phases5_zsg_True_centreTrue_mean_20251007/model_weights_2025_10_15.h5
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v3/phases2_zsg_True_centreTrue_mean_20251007/model_weights_2025_10_12.h5
+    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251021102749/checkpoints/ckpt-93000.index
+    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/checkpoints/ckpt-27000.index
+    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/model_weights_2025_11_09.h5
 )
 
 CONFIGS_TO_USE=(
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/phases5_centreTrue_mean_20250811/training_config.yaml
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/phases5_centreTrue_sum_20250811/training_config.yaml
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/train_mix_v2_mix_v2_20250731/training_config.yaml
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/train_mix_v2_mix_v2_20250729/training_config.yaml
-
-    # 20251020
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v3/phases5_zsg_True_centreTrue_sum_20251007/training_config.yaml
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v3/phases5_zsg_True_centreTrue_mean_20251007/training_config.yaml
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v3/phases2_zsg_True_centreTrue_mean_20251007/training_config.yaml
+    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251021102749/training_config.yaml
+    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/training_config.yaml
+    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/training_config.yaml
 )
 
 # --- 5. 检查配置 ---

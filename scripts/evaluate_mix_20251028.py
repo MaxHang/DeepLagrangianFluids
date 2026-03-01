@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-用于数据驱动多相流体模拟网络的评估脚本。
+用于数据驱动多相流体模拟网络的评估脚本（增强诊断版本）。
 
 本脚本的核心功能是执行长时序（rollout）评估，以全面衡量模拟器在
 准确性和物理一致性方面的性能。其主要组件包括：
@@ -11,6 +11,8 @@
    一个专门用于收集、计算和保存评估指标的工具类。它能够按场景记录
    多种指标，如位置均方误差（Position MSE）、体积分数均方误差（VF MSE）
    以及质量漂移（Mass Drift）等，并支持将结果序列化为JSON文件。
+   
+   [V2 增强] 新增VF守恒性检查、总质量漂移监控、详细的调试输出
 
 2. 评估函数 (evaluate_single_scene_tf):
    负责对单个独立的场景进行完整的自回归（rollout）预测，并在每个
@@ -45,17 +47,28 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from datasets.dataset_reader_h5_mix import read_data_val
 
 # ===================================================================
-# 2. 全新的评估指标收集器：SimulationMetrics 类
+# 2. 增强的评估指标收集器：SimulationMetrics 类
 # ===================================================================
 class SimulationMetrics:
     """
     一个用于收集、计算和保存多相流体模拟评估指标的专用类。
     该类按场景(scene)组织数据，并能计算多种准确性和物理一致性指标。
+    
+    [V2 增强]
+    - 新增 vf_sum_error: 检查每个粒子的 VF 和是否等于1
+    - 新增 total_mass_drift: 所有相的总质量漂移
+    - 新增详细的调试输出选项
     """
-    def __init__(self) -> None:
-        """初始化一个空的指标字典。"""
+    def __init__(self, verbose: bool = False) -> None:
+        """
+        初始化一个空的指标字典。
+        
+        Args:
+            verbose: 是否输出详细的调试信息
+        """
         self.metrics_data: Dict[int, Dict[str, List]] = {}
-        print("[Metrics] SimulationMetrics collector initialized.")
+        self.verbose = verbose
+        print("[Metrics] SimulationMetrics collector initialized (Enhanced V2).")
 
     def _get_or_create_scene(self, scene_id: int) -> Dict[str, List]:
         """
@@ -74,25 +87,34 @@ class SimulationMetrics:
                 'mass_drift_per_phase': [],
                 'kinetic_energy_pred': [],
                 'kinetic_energy_gt': [],
+                'vf_sum_error': [],           # ✅ 新增：VF守恒误差
+                'total_mass_drift': [],        # ✅ 新增：总质量漂移
                 'timestamps': []
             }
         return self.metrics_data[scene_id]
 
-    def record_step(self, scene_id: int, frame_id: int, pr_pos: np.ndarray, gt_pos: np.ndarray, pr_vf: Optional[np.ndarray] = None, gt_vf: Optional[np.ndarray] = None, pr_vel: Optional[np.ndarray] = None, gt_vel: Optional[np.ndarray] = None, initial_total_mass: Optional[np.ndarray] = None, particle_masses: Optional[np.ndarray] = None) -> None:
+    def record_step(self, scene_id: int, frame_id: int, 
+                    pr_pos: np.ndarray, gt_pos: np.ndarray, 
+                    pr_vf: Optional[np.ndarray] = None, 
+                    gt_vf: Optional[np.ndarray] = None, 
+                    pr_vel: Optional[np.ndarray] = None, 
+                    gt_vel: Optional[np.ndarray] = None, 
+                    initial_total_mass: Optional[np.ndarray] = None, 
+                    phase_densities: Optional[np.ndarray] = None) -> None:
         """
-        在模拟的单个时间步记录所有相关指标。
+        在模拟的单个时间步记录所有相关指标（增强版本）。
 
         Args:
             scene_id (int): 场景的唯一标识符。
             frame_id (int): 当前的帧ID。
             pr_pos (np.ndarray): 预测的粒子位置。
             gt_pos (np.ndarray): 基准真相的粒子位置。
-            pr_vf (np.ndarray, optional): 预测的体积分数。
+            pr_vf (np.ndarray, optional): 预测的体积分数，shape [N, num_phases]。
             gt_vf (np.ndarray, optional): 基准真相的体积分数。
             pr_vel (np.ndarray, optional): 预测的粒子速度。
             gt_vel (np.ndarray, optional): 基准真相的粒子速度。
-            initial_total_mass (np.ndarray, optional): 每个相的初始总质量。
-            particle_masses (np.ndarray, optional): 每个粒子的质量。
+            initial_total_mass (np.ndarray, optional): 每个相的初始总质量，shape [num_phases]。
+            phase_densities (np.ndarray, optional): 各相的密度，shape [num_phases]。
         """
         scene_metrics = self._get_or_create_scene(scene_id)
         
@@ -104,43 +126,88 @@ class SimulationMetrics:
             vf_mse = np.mean(np.sum((pr_vf - gt_vf)**2, axis=-1))
             scene_metrics['vf_mse'].append(vf_mse)
         
-        # --- 记录物理一致性指标 ---
-        if pr_vf is not None and initial_total_mass is not None:
-            current_total_mass = np.sum(pr_vf * particle_masses, axis=0) if particle_masses is not None else np.sum(pr_vf, axis=0)
-            mass_drift = np.abs(current_total_mass - initial_total_mass) / initial_total_mass
+        # --- 记录物理一致性指标（增强版）---
+        if pr_vf is not None and initial_total_mass is not None and phase_densities is not None:
+            # ✅ 新增：检查VF是否守恒（Σ VF_i = 1）
+            vf_sum = np.sum(pr_vf, axis=-1)  # [N]
+            vf_conservation_error = np.mean(np.abs(vf_sum - 1.0))
+            scene_metrics['vf_sum_error'].append(vf_conservation_error)
+            
+            # 质量漂移计算（按相）
+            current_mixture_density = np.sum(pr_vf * phase_densities, axis=-1, keepdims=True)  # [N, 1]
+            current_total_mass = np.sum(pr_vf * current_mixture_density, axis=0)  # [num_phases]
+            mass_drift = (current_total_mass - initial_total_mass) / (initial_total_mass + 1e-10)
             scene_metrics['mass_drift_per_phase'].append(mass_drift)
+            
+            # ✅ 新增：总质量漂移（所有相之和）
+            total_mass_all_phases = np.sum(current_total_mass)
+            initial_total_mass_all = np.sum(initial_total_mass)
+            total_mass_drift = np.abs(total_mass_all_phases - initial_total_mass_all) / (initial_total_mass_all + 1e-10)
+            scene_metrics['total_mass_drift'].append(total_mass_drift)
+            
+            # ✅ 调试输出（每100帧或检测到异常时）
+            if self.verbose and (frame_id % 100 == 0 or vf_conservation_error > 0.01 or np.any(mass_drift > 0.5)):
+                print(f"\n[Scene {scene_id}, Frame {frame_id}] Physics Diagnostics:")
+                print(f"  VF sum error: {vf_conservation_error:.6f} (should be ~0)")
+                print(f"  VF sum range: [{np.min(vf_sum):.6f}, {np.max(vf_sum):.6f}] (should be ~1.0)")
+                print(f"  Mass drift per phase (signed):")
+                for i, drift in enumerate(mass_drift):
+                    sign = "+" if drift > 0 else ""
+                    print(f"    Phase {i+1}: {sign}{drift:.4%}")
+                print(f"  Total mass drift: {total_mass_drift:.4%}")
+                if np.any(mass_drift > 1.0):
+                    print(f"  WARNING  WARNING: Mass drift >100% detected!")
+                    print(f"  Current mass: {current_total_mass}")
+                    print(f"  Initial mass: {initial_total_mass}")
 
-        if pr_vel is not None and gt_vel is not None and particle_masses is not None:
-            ke_pred = 0.5 * np.sum(particle_masses * np.sum(pr_vel**2, axis=-1))
-            ke_gt = 0.5 * np.sum(particle_masses * np.sum(gt_vel**2, axis=-1))
+        if pr_vel is not None and gt_vel is not None and pr_vf is not None and phase_densities is not None:
+            # 动能计算
+            current_mixture_density = np.sum(pr_vf * phase_densities, axis=-1, keepdims=True)  # [N, 1]
+            ke_pred = 0.5 * np.sum(current_mixture_density[:, 0] * np.sum(pr_vel**2, axis=-1))
+            ke_gt = 0.5 * np.sum(current_mixture_density[:, 0] * np.sum(gt_vel**2, axis=-1))
             scene_metrics['kinetic_energy_pred'].append(ke_pred)
             scene_metrics['kinetic_energy_gt'].append(ke_gt)
         
         scene_metrics['timestamps'].append(frame_id)
 
-    def summarize_results(self) -> Dict[str, float]:
+    def summarize_results(self) -> Dict[str, Any]:
         """
-        计算并返回所有已记录场景的最终平均指标。
+        计算并返回所有已记录场景的最终平均指标（增强版本）。
 
         Returns:
-            Dict[str, float]: 包含最终平均指标的字典。
+            Dict[str, Any]: 包含最终平均指标的字典。
         """
-        summary = { 'overall_position_mse': [], 'overall_vf_mse': [], 'overall_final_mass_drift': [] }
+        summary = { 
+            'overall_position_mse': [], 
+            'overall_vf_mse': [], 
+            'overall_final_mass_drift': [],
+            'overall_final_mass_drift_per_phase': [],
+            'overall_vf_sum_error': [],           # ✅ 新增
+            'overall_total_mass_drift': []        # ✅ 新增
+        }
+        
         for scene_id, metrics in self.metrics_data.items():
             if metrics['position_mse']:
                 summary['overall_position_mse'].append(np.mean(metrics['position_mse']))
             if metrics['vf_mse']:
                 summary['overall_vf_mse'].append(np.mean(metrics['vf_mse']))
             if metrics['mass_drift_per_phase']:
-                # 取最后一个时间步的漂移作为代表，并对所有相取平均
                 final_drift_per_phase = metrics['mass_drift_per_phase'][-1]
-                summary['overall_final_mass_drift'].append(np.mean(final_drift_per_phase))
+                summary['overall_final_mass_drift'].append(np.mean(np.abs(final_drift_per_phase)))
+                summary['overall_final_mass_drift_per_phase'].append(final_drift_per_phase)
+            if metrics['vf_sum_error']:
+                summary['overall_vf_sum_error'].append(np.mean(metrics['vf_sum_error']))
+            if metrics['total_mass_drift']:
+                summary['overall_total_mass_drift'].append(np.mean(metrics['total_mass_drift']))
         
         # 计算所有场景的最终平均值
         final_results = {
             'Position MSE': np.mean(summary['overall_position_mse']) if summary['overall_position_mse'] else -1.0,
             'VF MSE': np.mean(summary['overall_vf_mse']) if summary['overall_vf_mse'] else -1.0,
-            'Final Mass Drift': np.mean(summary['overall_final_mass_drift']) if summary['overall_final_mass_drift'] else -1.0
+            'Final Mass Drift (Average)': np.mean(summary['overall_final_mass_drift']) if summary['overall_final_mass_drift'] else -1.0,
+            'Final Mass Drift (Per Phase)': np.mean(summary['overall_final_mass_drift_per_phase'], axis=0).tolist() if summary['overall_final_mass_drift_per_phase'] else [],
+            'VF Sum Error (Average)': np.mean(summary['overall_vf_sum_error']) if summary['overall_vf_sum_error'] else -1.0,  # ✅ 新增
+            'Total Mass Drift (Average)': np.mean(summary['overall_total_mass_drift']) if summary['overall_total_mass_drift'] else -1.0  # ✅ 新增
         }
         return final_results
         
@@ -196,11 +263,19 @@ def evaluate_single_scene_tf(model: tf.keras.Model, scene_data: List[Dict], scen
     }
 
     # 为守恒性计算做准备
-    initial_total_mass_per_phase, particle_masses = None, None
-    if pr_vf is not None:
-        initial_mixture_density = np.sum(pr_vf * initial_data['density'][0], axis=-1, keepdims=True)
-        particle_masses = initial_mixture_density
-        initial_total_mass_per_phase = np.sum(pr_vf * particle_masses, axis=0)
+    phase_densities = initial_data['density'][0]  # [num_phases]
+    initial_mixture_density = np.sum(pr_vf * phase_densities, axis=-1, keepdims=True)  # [N, 1]
+    initial_total_mass_per_phase = np.sum(pr_vf * initial_mixture_density, axis=0)  # [num_phases]
+    
+    # ✅ 新增：初始状态验证
+    if metrics_collector.verbose:
+        initial_vf_sum = np.sum(pr_vf, axis=-1)
+        print(f"\n[Scene {scene_id}] Initial State Check:")
+        print(f"  Num particles: {pr_vf.shape[0]}")
+        print(f"  Num phases: {pr_vf.shape[1]}")
+        print(f"  Initial VF sum range: [{np.min(initial_vf_sum):.6f}, {np.max(initial_vf_sum):.6f}]")
+        print(f"  Initial mass per phase: {initial_total_mass_per_phase}")
+        print(f"  Phase densities: {phase_densities}")
 
     # --- 2. 循环执行 Rollout ---
     for data in scene_data:
@@ -227,7 +302,7 @@ def evaluate_single_scene_tf(model: tf.keras.Model, scene_data: List[Dict], scen
                 pr_vf=pr_vf, gt_vf=data.get('phase_fractions0', [None])[0],
                 pr_vel=pr_vel, gt_vel=data.get('vel0', [None])[0],
                 initial_total_mass=initial_total_mass_per_phase,
-                particle_masses=particle_masses
+                phase_densities=phase_densities
             )
             
     print(f" scene finished.", flush=True)
@@ -236,15 +311,28 @@ def evaluate_single_scene_tf(model: tf.keras.Model, scene_data: List[Dict], scen
 # ===================================================================
 # 4. 主控流程与辅助函数
 # ===================================================================
-def print_results(final_results: Dict[str, float]) -> None:
-    """以格式化的方式打印最终的评估结果。"""
+def print_results(final_results: Dict[str, Any]) -> None:
+    """以格式化的方式打印最终的评估结果（增强版本）。"""
     print('\n==================== FINAL EVALUATION SUMMARY ====================')
     for name, value in final_results.items():
-        if 'Drift' in name:
-            print(f"  {name:<20}: {value:.4%}")
+        if name == 'Final Mass Drift (Per Phase)':
+            # 特殊处理：按相打印
+            print(f"  {name:<35}:")
+            if isinstance(value, list) and len(value) > 0:
+                for i, drift in enumerate(value):
+                    # ✅ 修改：显示正负号和状态
+                    abs_drift = abs(drift)
+                    sign = "+" if drift > 0 else ("-" if drift < 0 else " ")
+                    status = "True" if abs_drift < 0.01 else ("WARNING" if abs_drift < 0.1 else "FALSE")
+                    print(f"    Phase {i+1}: {sign}{abs_drift:.4%} {status}")
+            else:
+                print(f"    N/A")
+        elif 'Drift' in name or 'Error' in name:
+            status = "True" if value < 0.01 else ("WARNING" if value < 0.1 else "FALSE")
+            print(f"  {name:<35}: {value:.4%} {status}")
         else:
-            print(f"  {name:<20}: {value:.6f}")
-    print('==============================================================')
+            print(f"  {name:<35}: {value:.6f}")
+    print('==================================================================')
 
 def eval_checkpoint(checkpoint_path: str, val_files: List[str], options: argparse.Namespace, cfg: Dict, train_script_module: Any, gpu_id: int) -> SimulationMetrics:
     """加载一个检查点，按场景执行评估，并在每个场景后保存。"""
@@ -276,7 +364,9 @@ def eval_checkpoint(checkpoint_path: str, val_files: List[str], options: argpars
     output_filename = os.path.basename(checkpoint_path) + '_eval_metrics.json'
     output_path = os.path.join(os.path.dirname(checkpoint_path), output_filename)
     
-    metrics_collector = SimulationMetrics()
+    # ✅ 启用详细模式（根据命令行参数）
+    metrics_collector = SimulationMetrics(verbose=options.verbose)
+    
     # 检查是否可以从已有的结果文件中恢复进度
     if os.path.isfile(output_path):
         print(f"[Main] Found existing results file. Loading progress from: {output_path}")
@@ -295,8 +385,7 @@ def eval_checkpoint(checkpoint_path: str, val_files: List[str], options: argpars
             scene_data,
             scene_id,
             options.frame_skip, 
-            metrics_collector, 
-            **cfg.get('evaluation', {})
+            metrics_collector
         )
         # 每个场景评估完毕后，立即保存进度
         metrics_collector.save(output_path)
@@ -311,6 +400,7 @@ def main() -> int:
     parser.add_argument("--weights", type=str, required=True, help="Path to the model weights file (.h5 or .index for ckpt).")
     parser.add_argument("--gpu", type=int, default=0, help="The GPU ID to use for this evaluation task.")
     parser.add_argument("--frame_skip", type=int, default=5, help="The frame skip for evaluation.")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose debugging output.")  # ✅ 新增
     
     args = parser.parse_args()
     print("[Main] Starting evaluation process with arguments:", args)
@@ -335,7 +425,7 @@ def main() -> int:
     if os.path.isfile(output_path):
         print(f"[Main] Evaluation file already exists: {output_path}")
         print("[Main] Loading previously computed results...")
-        metrics_collector = SimulationMetrics()
+        metrics_collector = SimulationMetrics(verbose=args.verbose)
         metrics_collector.load(output_path)
     else:
         print(f"[Main] Evaluating weights file: {args.weights}")

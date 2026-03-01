@@ -1,0 +1,68 @@
+# ====================================================================
+# 配置文件: Pair-wise FiLM 模式 (Pair-wise FiLM Modulation Mode)
+# ====================================================================
+# 
+# 该配置使用 Pair-wise FiLM 调制进行密度条件化:
+#   Γᵢⱼ^ρ = γᵢⱼ^ρ ⊙ fⱼ + βᵢⱼ^ρ
+#   其中 γᵢⱼ^ρ, βᵢⱼ^ρ 由密度比 (ρⱼ/ρᵢ) 通过 MLP 生成
+#
+# 优点:
+#   - 可学习的密度调制机制，表达能力强
+#   - 对每个特征通道独立调制，更细粒度
+#   - 理论上可以学到更复杂的密度交互模式
+#
+# 缺点:
+#   - 额外的学习参数（2个小型 MLP）
+#   - 训练时间稍长
+#   - 需要更多数据才能充分训练
+#
+# 适用场景:
+#   - 消融实验，对比 density_ratio 模式
+#   - 数据充足的训练环境
+#   - 追求最佳性能的场景
+# ====================================================================
+
+# 数据集路径
+dataset_dir: "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv"
+
+# 模型配置
+model:
+  # 基础参数
+  particle_radius: 0.05
+  rest_dens: 1000
+  
+  # 网络结构
+  use_sym: false  # 不使用对称卷积
+  
+  # 多密度流体支持
+  multi_density_support: true
+  density_condition_layers: true  # 启用密度条件化
+  density_relative: true          # 使用相对密度
+  use_density: true               # 使用密度特征
+  
+  # 密度嵌入
+  density_embed: true
+  density_embed_dim: 8
+  
+  # 🔥 密度条件化模式: Pair-wise FiLM
+  density_modulation_mode: 'pairwise_film'  # 使用 Pair-wise FiLM 调制
+  film_hidden_dim: 16  # FiLM MLP 的隐藏层维度
+  
+  # 参数说明:
+  #   - film_hidden_dim: FiLM 网络的隐藏层维度
+  #     * 更大的值 -> 更强的表达能力，但参数更多
+  #     * 推荐范围: 8-32
+  #     * 默认: 16
+
+# 训练数据配置
+train_data:
+  random_rotation: true  # 随机旋转训练数据（围绕重力轴）
+
+# 训练输出目录
+train_dir: "/workspace/xyh_synology/graduate/weights/nomix-fluid/pairwise_film"
+
+# 训练建议:
+#   1. 先用 density_ratio 模式训练一个基线模型
+#   2. 再用 pairwise_film 模式训练进行对比
+#   3. 观察 TensorBoard 中的损失曲线和评估指标
+#   4. 如果 FiLM 模式没有明显提升，说明密度比已经足够
