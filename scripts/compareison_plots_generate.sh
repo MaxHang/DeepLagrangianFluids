@@ -28,22 +28,24 @@ mkdir -p "$OUTPUT_DIR"
 
 # --- 实验组 1: 消融研究 (Ablation Study) ---
 #    对比多个模型变体在同一个场景下的表现
-ABLATION_SCENE_ID="1" # 假设我们在场景1上进行消融对比
+# ABLATION_SCENE_ID="cd_0.17_cf_0.07_density_2000_5000" # 假设我们在场景1上进行消融对比
+# ABLATION_SCENE_ID="cd_1.0_cf_0.01_density_800_1500" # 假设我们在场景1上进行消融对比
+ABLATION_SCENE_ID="cd_0.29_cf_0.83_density_1000_3000" # 假设我们在场景1上进行消融对比
 
 # 定义消融实验中涉及的模型结果文件和对应的标签
 ABLATION_MODELS=(
-    "results/ablation_baseline_metrics.json"
-    "results/ablation_deespet_sum_metrics.json"
-    "results/ablation_mean_agg_metrics.json"
-    "results/ablation_feature_norm_metrics.json"
-    "results/ablation_full_model_metrics.json"
+    "/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v2/train_mix_v2_mix_v2_20250731/model_weights_2025_08_02.h5_eval_metrics.json"
+    "/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251021102749/ckpt-93000.index_eval_metrics.json"
+    # "results/ablation_mean_agg_metrics.json"
+    # "results/ablation_feature_norm_metrics.json"
+    # "results/ablation_full_model_metrics.json"
 )
 ABLATION_LABELS=(
     "Baseline"
-    "DeepSets (Sum)"
-    "Mean Aggregation"
-    "Feature Norm"
-    "Ours (Full Model)"
+    # "DeepSets (Sum)"
+    # "Mean Aggregation"
+    # "Feature Norm"
+    "Ours"
 )
 
 # 定义消融实验中要对比的指标
@@ -51,6 +53,7 @@ ABLATION_METRICS_TO_PLOT=(
     "position_mse"
     "vf_mse"
     "mass_drift_per_phase"
+    "kinetic_energy"
 )
 
 
@@ -97,10 +100,10 @@ for metric in "${ABLATION_METRICS_TO_PLOT[@]}"; do
     output_filename="${OUTPUT_DIR}/ablation_scene_${ABLATION_SCENE_ID}_${metric}.png"
     
     python3 "${COMPARE_SCRIPT_PATH}" \
+        "${ABLATION_MODELS[@]}" \
         --scene_id "${ABLATION_SCENE_ID}" \
         --metric "${metric}" \
         --labels "${ABLATION_LABELS[@]}" \
-        "${ABLATION_MODELS[@]}" \
         --output "${output_filename}"
 
     if [ $? -eq 0 ]; then
@@ -111,35 +114,35 @@ for metric in "${ABLATION_METRICS_TO_PLOT[@]}"; do
 done
 
 
-# --- 执行实验组 2: 最终模型对比 ---
-echo ""
-echo "--- Generating Final Model Comparison Plots (Scene: ${FINAL_MODEL_COMPARISON_SCENE_ID}) ---"
-for metric in "${FINAL_METRICS_TO_PLOT[@]}"; do
+# # --- 执行实验组 2: 最终模型对比 ---
+# echo ""
+# echo "--- Generating Final Model Comparison Plots (Scene: ${FINAL_MODEL_COMPARISON_SCENE_ID}) ---"
+# for metric in "${FINAL_METRICS_TO_PLOT[@]}"; do
 
-    echo "[INFO] Plotting metric: ${metric}"
+#     echo "[INFO] Plotting metric: ${metric}"
 
-    output_filename="${OUTPUT_DIR}/final_comp_scene_${FINAL_MODEL_COMPARISON_SCENE_ID}_${metric}.png"
+#     output_filename="${OUTPUT_DIR}/final_comp_scene_${FINAL_MODEL_COMPARISON_SCENE_ID}_${metric}.png"
 
-    python3 "${COMPARE_SCRIPT_PATH}" \
-        --scene_id "${FINAL_MODEL_COMPARISON_SCENE_ID}" \
-        --metric "${metric}" \
-        --labels "${FINAL_MODELS_LABELS[@]}" \
-        "${FINAL_MODELS_TO_COMPARE[@]}" \
-        --output "${output_filename}"
+#     python3 "${COMPARE_SCRIPT_PATH}" \
+#         --scene_id "${FINAL_MODEL_COMPARISON_SCENE_ID}" \
+#         --metric "${metric}" \
+#         --labels "${FINAL_MODELS_LABELS[@]}" \
+#         "${FINAL_MODELS_TO_COMPARE[@]}" \
+#         --output "${output_filename}"
 
-    if [ $? -eq 0 ]; then
-        echo "[SUCCESS] Plot saved to ${output_filename}"
-    else
-        echo "[ERROR] Failed to generate plot for metric: ${metric}"
-    fi
-done
+#     if [ $? -eq 0 ]; then
+#         echo "[SUCCESS] Plot saved to ${output_filename}"
+#     else
+#         echo "[ERROR] Failed to generate plot for metric: ${metric}"
+#     fi
+# done
 
 
 echo ""
 echo "=========================================================="
 echo "            All Comparison Plots Generated.               "
 echo "=========================================================="
-echo "Plots are saved in the '${OUTPUT_DIR}' directory."```
+echo "Plots are saved in the '${OUTPUT_DIR}' directory."
 
 # ### 如何使用这个脚本
 

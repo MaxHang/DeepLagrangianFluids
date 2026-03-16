@@ -1,0 +1,23 @@
+dataset_dir: "/workspace/xyh_synology/graduate/datasets/mix-20260111" # path to the dataset directory with 'train' and 'valid' subdirs.
+model:
+  particle_radius: 0.05
+  max_num_phases: 5  # not neccessary
+  use_zero_sum_game: true
+  aggregation: 'mean' # deepset aggregation method, defauilt 'mean', choice: ['sum', 'mean']
+  phase_feat_centralization: true # default False, whether to centralize phase features to zero mean.
+  # ========================== cd cf integration strategy ===============================
+  cd_cf_as_input: true
+  use_cd_cf_film: true
+  use_cd_cf_attention: true
+  cd_cf_attention_heads: 4
+  use_cd_cf_physics: true
+  cd_cf_embedding_dim: 64
+loss_weights:
+  pos: 1.0
+  vol: 1.0
+  gamma: 0.5
+  use_mass_conservation: true  # use mass conservation
+  mass_conservation: 0.1       # mass conservation loss weight
+train_data:
+  random_rotation: true # randomly rotate training data about the gravity axis.
+train_dir: "/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5" # path to the directory where the model weights will be saved.

@@ -4,7 +4,7 @@
 import tensorflow as tf
 
 # 调试模式开关
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 # 每个 print 调用点的计数器
 print_counters = {}

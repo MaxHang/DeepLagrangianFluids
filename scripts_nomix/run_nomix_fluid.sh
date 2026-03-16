@@ -5,15 +5,15 @@ RUN_SCRIPT="scripts/run_network_nomixfluid.py"
 TRAIN_SCRIPT="scripts/train_network_nomix_tf.py"
 YAML_FILE="scripts_nomix/nomix-fluid.yaml"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
-LOG_FILE="scripts_nomix/run_nomix_fluid_${DATE}.log"  # 定义日志文件名，包含日期和时间
+LOG_FILE="scripts_nomix/log_run/run_nomix_fluid_${DATE}.log"  # 定义日志文件名，包含日期和时间
 SCENE="scripts_nomix/run_nomix_valid.json"
 OUTPUT="/workspace/xyh_synology/graduate/run_network/nomix_fluid/ply_${DATE}"
-NUMSTEPS=400
+NUMSTEPS=1000
 GPU_ID="0"  # 默认使用GPU 0
 # WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_04_22/model_weights_2025_04_22.h5"
 # WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_04_23/checkpoints/ckpt-22000.index"
 # WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_05_04/checkpoints/ckpt-27000.index"
-WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_05_06/checkpoints/ckpt-2000.index"
+WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_05_06/model_weights_2025_05_06.h5"
 
 # 检查输入参数
 if [ "$#" -ge 1 ]; then

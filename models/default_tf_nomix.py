@@ -108,15 +108,7 @@ class MyParticleNetwork(tf.keras.Model):
         self.dense0_fluid = tf.keras.layers.Dense(name="dense0_fluid",
                                                   units=self.layer_channels[0],
                                                   activation=None)
-        # self.conv0_fluid = Conv(name="conv0_fluid",
-        #                         filters=self.layer_channels[0],
-        #                         activation=None)
-        # self.conv0_obstacle = Conv(name="conv0_obstacle",
-        #                            filters=self.layer_channels[0],
-        #                            activation=None)
-        # self.dense0_fluid = tf.keras.layers.Dense(name="dense0_fluid",
-        #                                           units=self.layer_channels[0],
-        #                                           activation=None)
+
 
         self.convs = []
         self.denses = []

@@ -22,7 +22,7 @@ train_params = TrainParams(50 * _k, 0.001, 16)
 # train_params = TrainParams(20 * _k, 0.001, 16)
 
 
-def create_model(gpu_id=1, **kwargs):
+def create_model(gpu_id=2, **kwargs):
     if gpu_id is not None:
         gpus = tf.config.list_physical_devices('GPU')
         if gpus:

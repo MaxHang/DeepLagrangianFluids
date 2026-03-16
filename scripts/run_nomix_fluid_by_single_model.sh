@@ -2,16 +2,18 @@
 
 # 定义变量, 批量处理文件夹
 RUN_SCRIPT="scripts/run_network_nomixfluid_by_single_model.py"
-TRAIN_SCRIPT="scripts/train_network_nomix_tf.py"
-YAML_FILE="scripts_nomix/nomix-single-dens-no_sym.yaml"
+TRAIN_SCRIPT="scripts/train_network_tf.py"
+YAML_FILE="scripts/single_eval_nomix-fluid.yaml"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
-LOG_FILE="scripts_nomix/log_run/run_nomix_single_dens_no_sym_${DATE}.log"  # 定义日志文件名，包含日期和时间
-# SCENE="scripts_nomix/run_nomix_single_valid.json"
+LOG_FILE="scripts/log_run/run_nomix_fluid_${DATE}.log"  # 定义日志文件名，包含日期和时间
 SCENE="scripts_nomix/run_nomix_valid.json"
-OUTPUT="/workspace/xyh_synology/graduate/run_network/nomix_single_dens/ply_${DATE}"
+OUTPUT="/workspace/xyh_synology/graduate/run_network/nomix_fluid/ply_${DATE}"
 NUMSTEPS=1000
 GPU_ID="0"  # 默认使用GPU 0
-WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/ablation-single_dens-no_sym/train_network_nomix_tf_nomix-single-dens-no_sym_2025_05_06/model_weights_2025_05_07.h5"
+# WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_04_22/model_weights_2025_04_22.h5"
+# WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_04_23/checkpoints/ckpt-22000.index"
+# WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/train_network_nomix_tf_nomix-fluid_2025_05_04/checkpoints/ckpt-27000.index"
+WEIGHTS="scripts/model_weights.h5"
 
 # 检查输入参数
 if [ "$#" -ge 1 ]; then

@@ -25,9 +25,9 @@ TrainParams = namedtuple('TrainParams', ['max_iter', 'base_lr', 'batch_size'])
 train_params = TrainParams(50 * _k, 0.001, 64)
 
 
-def create_model(gpu_id=1, **kwargs):
+def create_model(gpu_id=2, **kwargs):
     # 设置 GPU 使用
-    # gpu_id = 1  # 默认使用1号 GPU
+    # gpu_id = 2  # 默认使用2号 GPU
     if gpu_id is not None:
         gpus = tf.config.list_physical_devices('GPU')
         if gpus:

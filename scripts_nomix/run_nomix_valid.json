@@ -1,9 +1,9 @@
 {
-    "h5_path1": "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1000_2000_box_1_cd_1.0_cf_0.0.h5",
+    "h5_path": "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1000_2000_box_1_cd_1.0_cf_0.0.h5",
     "h5_path2": "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1700_2000_box_4_cd_1.0_cf_0.0.h5",
     "h5_path3": "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1000_3000_box_3_cd_1.0_cf_0.0.h5",
     "h5_path4": "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1000_9000_box_3_cd_1.0_cf_0.0.h5",
-    "h5_path": "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1700_9000_box_7_cd_1.0_cf_0.0.h5",
+    "h5_path1": "/workspace/xyh_synology/graduate/datasets/nomix-fluid-cconv/valid/density_1700_9000_box_7_cd_1.0_cf_0.0.h5",
     "frame_id": 1,
     "walls": [
         {

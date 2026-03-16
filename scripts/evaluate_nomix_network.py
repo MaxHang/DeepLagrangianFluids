@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from fluid_evaluation_helper import FluidErrors
-from datasets.dataset_reader_h5_nomix import read_data_val
 import os
 import sys
 import argparse
@@ -12,6 +10,9 @@ import importlib
 import yaml
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from datasets.dataset_reader_h5_nomix import read_data_val
+from fluid_evaluation_helper import FluidErrors
 
 
 def evaluate_tf(model, val_dataset, frame_skip, fluid_errors=None, scale=1):
@@ -102,10 +103,11 @@ def evaluate_whole_sequence_tf(model,
             box_normals = data['box_normals'][0]
             init_pos = data['pos0'][0]
             init_vel = data['vel0'][0]
+            density = data['density'][0]
 
-            inputs = (init_pos, init_vel, None, box, box_normals)
+            inputs = (init_pos, init_vel, density, None, box, box_normals)
         else:
-            inputs = (pr_pos, pr_vel, None, box, box_normals)
+            inputs = (pr_pos, pr_vel, density, None, box, box_normals)
 
         pr_pos, pr_vel = model(inputs)
 
@@ -358,8 +360,8 @@ def main():
 
     train_dir = module_name + '_' + os.path.splitext(os.path.basename(
         args.cfg))[0]
-    # val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.zst')))
-    val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'test', '*.zst')))
+    val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'valid', '*.h5')))
+    # val_files = sorted(glob(os.path.join(cfg['dataset_dir'], 'test', '*.zst')))
     print("path", os.path.join(cfg['dataset_dir'], 'test'))
     print("len", len(val_files))
 

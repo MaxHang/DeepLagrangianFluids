@@ -319,7 +319,7 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    with open(args.cfg, 'r') as f:
+    with open(args.cfg, 'r', encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
 
     '''if args.trainscript is /path/to/my_script.py, then module_name is set to my_script
@@ -332,7 +332,7 @@ def main():
     '''use importlib.import_module dynamically imports module named module_name and assigns it to trainscript_module'''
     trainscript_module = importlib.import_module(module_name)
 
-    with open(args.scene, 'r') as f:
+    with open(args.scene, 'r', encoding='utf-8') as f:
         scene = json.load(f)
 
     if not os.path.exists(args.output):

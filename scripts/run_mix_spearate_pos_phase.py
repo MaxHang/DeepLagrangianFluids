@@ -247,6 +247,10 @@ def run_sim_tf(trainscript_module, cfg, weights_path, scene, num_steps, output_d
 
             range_ = range(x['start'], x['stop'], x['step'])
             fluids.append((points, velocities, phase_fractions, cd, cf, range_))
+
+    output_dir = output_dir + '_cd_' + str(cd) + '_cf_' + str(cf)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     
     # compute lowest point for removing out of bounds particles
     min_y = np.min(box[:, 1]) - 0.05 * (np.max(box[:, 1]) - np.min(box[:, 1]))
@@ -377,9 +381,6 @@ def main():
 
     with open(args.scene, 'r') as f:
         scene = json.load(f)
-
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
 
     gpu_id = int(args.gpu)
     return run_sim_tf(trainscript_module, cfg, args.weights, scene,

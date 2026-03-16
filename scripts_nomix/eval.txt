@@ -1,0 +1,1 @@
+./evaluate_nomix_network.py --trainscript train_network_nomix_tf.py --cfg scripts_nomix/nomix-fluid.yaml
