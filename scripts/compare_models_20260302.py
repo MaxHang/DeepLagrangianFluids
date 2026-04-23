@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-compare_models.py: 对比多个模型在特定场景下的评估指标。
+compare_models_20260302.py: 对比多个模型在特定场景下的评估指标。
 
 本脚本读取多个由 `evaluate.py` 生成的 JSON 结果文件，并为指定的
 场景和指标，生成一张包含所有模型性能曲线的对比图。
@@ -10,7 +10,7 @@ compare_models.py: 对比多个模型在特定场景下的评估指标。
 这对于可视化消融实验或对比不同超参数模型的效果非常有用。
 
 使用方法:
-python compare_models.py --scene_id 1 \
+python compare_models_20260302.py --scene_id 1 \
                          --metric position_mse \
                          --labels "Baseline" "Ours" \
                          results/baseline_metrics.json results/ours_metrics.json

@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # 定义变量, 批量处理文件夹
-RUN_SCRIPT="scripts/run_network_nomixfluid.py"
-TRAIN_SCRIPT="scripts/train_network_nomix_tf.py"
-YAML_FILE="/workspace/xyh_synology/graduate/weights/nomix-fluid/pairwise_film/20260331105041/training_config.yaml"
+RUN_SCRIPT="scripts/run_mix_v5.py"
+TRAIN_SCRIPT="scripts/train_mix_v5.py"
+YAML_FILE="scripts_mix_it_dens_cd_cf/mix_v5_cdcf_full_dataset_20260311.yaml"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
-LOG_FILE="scripts_nomix/log_run/run_nomix_film_${DATE}.log"  # 定义日志文件名，包含日期和时间
-SCENE="scripts_nomix/run_nomix_valid.json"
-OUTPUT="/workspace/xyh_synology/graduate/run_network/nomix_fluid/ply_${DATE}"
-NUMSTEPS=1000
-GPU_ID="2"  # 默认使用GPU 0
-# WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/pairwise_film/20251105144921/model_weights_2025_11_06.h5"
-WEIGHTS="/workspace/xyh_synology/graduate/weights/nomix-fluid/pairwise_film/20260331105041/model_weights_2026_04_01.h5"
+LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v5_cdcf_full_dataset_20260311_${DATE}.log"  # 定义日志文件名，包含日期和时间
+SCENE="scripts_mix_it_dens_cd_cf/run_mixfluid_valid_dataset_20260311.json"
+OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_dataset_20260311_${DATE}"
+# NUMSTEPS=2000
+NUMSTEPS=2000
+GPU_ID="0"  # 默认使用GPU 0
+WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20260311023411/checkpoints/ckpt-6000.index"
 
 # 检查输入参数
 if [ "$#" -ge 1 ]; then

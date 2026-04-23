@@ -20,7 +20,7 @@ import tensorflow as tf
 import open3d.ml.tf as ml3d
 import numpy as np
 from typing import Tuple, List, Optional
-from models.deepset_encoder_v3 import DeepSetPhaseEncoder
+from models.deepset_encoder_v import DeepSetPhaseEncoder
 
 
 class MultiPhaseParticleNetwork(tf.keras.Model):
@@ -128,14 +128,9 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         self.pos_conv = Conv('pos_conv', filters=3)
         self.pos_dense = tf.keras.layers.Dense(units=3, name='pos_dense')
 
-        # ── VF 空间卷积（捕捉相分数在邻域间的传播）─────────────────────────
-        # 输入: shared_features [N, C]  输出: [N, C]
-        # 卷积聚合邻域共享特征，体现相分数传播的局部性
-        self.vf_context_conv = Conv('vf_context_conv', filters=layer_channels[-1])
-
         # ── VF 逐相预测器（权重共享 MLP）───────────────────────────────────
         # 输入: [N, num_phases, layer_channels[-1] + 2]
-        #   layer_channels[-1]: VF 空间卷积输出（聚合了邻域相分数信息）
+        #   layer_channels[-1]: 主干网络输出（共享特征，对每个相复制）
         #   2: 归一化后的 (vf_i, log_density_i)（当前相的局部特征）
         # 输出: [N, num_phases, 1] → squeeze → [N, num_phases]
         #
@@ -209,7 +204,7 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
 
         # 6. VF 逐相预测
         next_vf = self._predict_next_vf(
-            shared_features, per_phase_features, current_phase_fractions, num_phases, pos_final
+            shared_features, per_phase_features, current_phase_fractions, num_phases
         )
 
         return pos_final, vel_final, next_vf
@@ -311,35 +306,27 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
                          shared_features: tf.Tensor,
                          per_phase_features: tf.Tensor,
                          current_vf: tf.Tensor,
-                         num_phases: tf.Tensor,
-                         pos: tf.Tensor) -> tf.Tensor:
+                         num_phases: tf.Tensor) -> tf.Tensor:
         """
         逐相预测 delta_vf，权重在所有相之间共享。
 
         步骤：
-          1. vf_context_conv 对 shared_features 做空间卷积，聚合邻域信息
-             → vf_spatial [N, C]（体现相分数的局部传播性）
-          2. vf_spatial [N, C] → 复制为 [N, num_phases, C]
-          3. 与 per_phase_features [N, num_phases, 2] 拼接
+          1. shared_features [N, C] → 复制为 [N, num_phases, C]
+          2. 与 per_phase_features [N, num_phases, 2] 拼接
              → per_phase_input [N, num_phases, C+2]
-          4. vf_per_phase_mlp 对最后一维操作（等同于逐相独立前向传播）
+          3. vf_per_phase_mlp 对最后一维操作（等同于逐相独立前向传播）
              → [N, num_phases, 1] → squeeze → delta_vf [N, num_phases]
-          5. 残差更新 + ReLU + 归一化 → next_vf
+          4. 残差更新 + ReLU + 归一化 → next_vf
 
         num_phases 可以是训练时未见过的值（如 3, 4），
         因为 MLP 权重只依赖特征维度，与相数无关。
         """
-        filter_extent = tf.constant(self.filter_extent)
-
-        # 空间卷积：让每个粒子感知邻域的相分数状态
-        vf_spatial = self.vf_context_conv(shared_features, pos, pos, filter_extent)  # [N, C]
-
-        vf_spatial_expanded = tf.tile(
-            tf.expand_dims(vf_spatial, axis=1),
+        shared_expanded = tf.tile(
+            tf.expand_dims(shared_features, axis=1),
             [1, num_phases, 1],
         )  # [N, num_phases, C]
 
-        per_phase_input = tf.concat([vf_spatial_expanded, per_phase_features], axis=-1)
+        per_phase_input = tf.concat([shared_expanded, per_phase_features], axis=-1)
         # [N, num_phases, C+2]
 
         delta_vf = tf.squeeze(self.vf_per_phase_mlp(per_phase_input), axis=-1)

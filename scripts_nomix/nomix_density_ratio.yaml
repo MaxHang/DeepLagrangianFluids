@@ -32,10 +32,11 @@ model:
   multi_density_support: true
   density_condition_layers: true  # 启用密度条件化
   density_relative: true          # 使用相对密度
-  use_density: true               # 使用密度特征
+  use_all_dens_condtition: true  # 使用所有dcdc
+  use_density: false               # 不使用密度特征
   
   # 密度嵌入
-  density_embed: true
+  density_embed: false  # 不使用密度嵌入
   density_embed_dim: 8
   
   # 🔥 密度条件化模式: 密度比权重

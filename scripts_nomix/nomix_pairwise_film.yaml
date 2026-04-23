@@ -38,15 +38,16 @@ model:
   multi_density_support: true
   density_condition_layers: true  # 启用密度条件化
   density_relative: true          # 使用相对密度
-  use_density: true               # 使用密度特征
+  use_all_dens_condtition: false  # 使用所有dcdc
+  use_density: false               # 不使用密度特征
   
   # 密度嵌入
-  density_embed: true
+  density_embed: false  # 不使用密度嵌入
   density_embed_dim: 8
   
   # 🔥 密度条件化模式: Pair-wise FiLM
   density_modulation_mode: 'pairwise_film'  # 使用 Pair-wise FiLM 调制
-  film_hidden_dim: 16  # FiLM MLP 的隐藏层维度
+  film_hidden_dim: 32  # FiLM MLP 的隐藏层维度
   
   # 参数说明:
   #   - film_hidden_dim: FiLM 网络的隐藏层维度

@@ -343,30 +343,35 @@ class MultiDensityContinuousConv(ContinuousConv):
             epsilon = 1e-6
             density_ratio = neighbor_densities / (query_densities_for_neighbors + epsilon)
             
-            # 生成 FiLM 参数
-            # gamma_ij: [num_pairs, in_channels] - 缩放参数
-            # beta_ij: [num_pairs, in_channels] - 平移参数
-            gamma_ij = self.film_gamma_net(density_ratio)
-            beta_ij = self.film_beta_net(density_ratio)
-            
-            # 收集邻居特征
-            # neighbor_features: [num_pairs, in_channels]
-            neighbor_features = tf.gather(inp_features, neighbors_index)
-            
-            # 应用 FiLM 调制
-            # Γᵢⱼ^ρ = γᵢⱼ^ρ ⊙ fⱼ + βᵢⱼ^ρ
-            # modulated_neighbor_features: [num_pairs, in_channels]
-            modulated_neighbor_features = gamma_ij * neighbor_features + beta_ij
-            
-            # 用调制后的特征替换原始特征中对应位置
-            # 注意: 如果同一个粒子是多个查询点的邻居，最后一次更新会覆盖前面的
-            # 但这不影响最终结果，因为 ContinuousConv 会根据 neighbors_index 重新收集特征
-            # inp_features_modulated: [num_input_points, in_channels]
-            inp_features_modulated = tf.tensor_scatter_nd_update(
-                tensor=inp_features,
-                indices=tf.expand_dims(neighbors_index, 1),  # [num_pairs, 1]
-                updates=modulated_neighbor_features
+            # NOTE:
+            # ContinuousConv 的输入特征是按 input point 存储，不能直接注入
+            # [num_pairs, in_channels] 的 pair-wise 特征。原先使用 scatter 会被重复
+            # 覆盖，导致结果依赖邻居顺序且显存开销巨大。
+            # 这里先把 pair-wise 密度比聚合成每个输入点的统计量，再执行点级 FiLM。
+            num_input_points = tf.shape(inp_features)[0]
+            density_ratio_sum = tf.math.unsorted_segment_sum(
+                density_ratio,
+                neighbors_index,
+                num_segments=num_input_points
             )
+            density_ratio_count = tf.math.unsorted_segment_sum(
+                tf.ones_like(density_ratio),
+                neighbors_index,
+                num_segments=num_input_points
+            )
+
+            safe_count = tf.maximum(density_ratio_count, 1.0)
+            density_ratio_per_input = density_ratio_sum / safe_count
+            density_ratio_per_input = tf.where(
+                density_ratio_count > 0.0,
+                density_ratio_per_input,
+                tf.ones_like(density_ratio_per_input)
+            )
+
+            # 生成点级 FiLM 参数并调制输入特征
+            gamma_i = self.film_gamma_net(density_ratio_per_input)
+            beta_i = self.film_beta_net(density_ratio_per_input)
+            inp_features_modulated = gamma_i * inp_features + beta_i
             
             # 计算空间窗口权重（不包含密度比，因为已经在特征中体现）
             # custom_neighbors_importance: [num_pairs]

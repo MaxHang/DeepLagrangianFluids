@@ -30,24 +30,18 @@ echo "[INFO] Starting parallel evaluation on ${NUM_GPUS} GPUs: ${AVAILABLE_GPUS[
 SCRIPT_DIR="scripts"
 # 假设您的 train_mix_v3.py 和 evaluate.py 都需要指定 GPU ID
 # 我们需要修改 evaluate.py 让它能接收 --gpu 参数
-TRAIN_SCRIPT_PATH="${SCRIPT_DIR}/train_mix_v5.py"
-EVAL_SCRIPT_PATH="${SCRIPT_DIR}/evaluate_mix_20251028.py"
+TRAIN_SCRIPT_PATH="${SCRIPT_DIR}/train_network_mix_tf.py"
+EVAL_SCRIPT_PATH="${SCRIPT_DIR}/evaluate_mix_20251028_nodens.py"
 LOG_DIR="$(dirname "$0")/log_evaluation"
 mkdir -p "$LOG_DIR"
 
 # --- 4. 实验配置 (一一对应) ---
 MODELS_TO_TEST=(
-    # /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251021102749/checkpoints/ckpt-93000.index
-    # /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/checkpoints/ckpt-27000.index
-    # /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/model_weights_2025_11_09.h5
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/checkpoints/ckpt-100000.index
+    /workspace/xyh_synology/graduate/weights/mix-fluid/train_network_mix_tf_mix-fluid_20250507/model_weights_2025_05_08.h5
 )
 
 CONFIGS_TO_USE=(
-    # /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251021102749/training_config.yaml
-    # /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/training_config.yaml
-    # /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/training_config.yaml
-    /workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v5/20251031150706/training_config_datasets_1000_1000_dens.yaml
+    /workspace/xyh_synology/graduate/weights/mix-fluid/train_network_mix_tf_mix-fluid_20250507/mix-fluid.yaml
 )
 
 # --- 5. 检查配置 ---

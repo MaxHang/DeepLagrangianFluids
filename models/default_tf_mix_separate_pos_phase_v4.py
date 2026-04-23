@@ -39,7 +39,7 @@ import open3d.ml.tf as ml3d
 import numpy as np
 from typing import Tuple, Dict, List, Optional
 from debug_utils import debug_print
-from models.deepset_encoder_v2 import DeepSetPhaseEncoder
+from models.deepset_encoder_v import DeepSetPhaseEncoder
 
 import time
 

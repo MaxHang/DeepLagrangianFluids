@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+compare_models.py: 对比多个模型在特定场景下的评估指标。
+
+本脚本读取多个由 `evaluate.py` 生成的 JSON 结果文件，并为指定的
+场景和指标，生成一张包含所有模型性能曲线的对比图。
+
+这对于可视化消融实验或对比不同超参数模型的效果非常有用。
+
+使用方法:
+python compare_models.py --scene_id 1 \
+                         --metric position_mse \
+                         --labels "Baseline" "Ours" \
+                         results/baseline_metrics.json results/ours_metrics.json
+"""
+
+import json
+import sys
+import argparse
+from pathlib import Path
+from typing import Dict, Any, List
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import matplotlib as mpl
+from matplotlib import font_manager
+
+# ===================== 字体（关键：强制用路径） =====================
+FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+
+if not Path(FONT_PATH).exists():
+    raise RuntimeError(f"❌ 中文字体不存在: {FONT_PATH}")
+
+font_prop = font_manager.FontProperties(fname=FONT_PATH)
+
+# ===================== 论文级绘图配置 =====================
+def setup_plot_style():
+    mpl.rcParams.update({
+        "font.family": "sans-serif",
+        "axes.unicode_minus": False,
+
+        # 字号（论文推荐）
+        "font.size": 12,
+        "axes.labelsize": 14,
+        "axes.titlesize": 14,
+        "legend.fontsize": 11,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+
+        # 线条
+        "lines.linewidth": 2,
+
+        # 图像
+        "figure.figsize": (10, 6),
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
+
+        # 网格
+        "axes.grid": True,
+        "grid.linestyle": "--",
+        "grid.alpha": 0.4,
+
+        # 去掉上右边框（论文风格）
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    })
+
+
+# 论文配色
+COLORS = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#8c564b"]
+LINESTYLES = ["-", "--", "-.", ":", "-"]
+
+# 指标配置
+METRIC_CONFIG = {
+    'position_mse': {
+        'ylabel': '位置均方误差',
+        'log_scale': True
+    },
+    'vf_mse': {
+        'ylabel': '体积分数均方误差',
+        'log_scale': True
+    },
+    'mass_drift_per_phase': {
+        'ylabel': '相对质量漂移',
+        'log_scale': False,
+        # 'formatter': mticker.PercentFormatter(1.0)
+    },
+    'kinetic_energy': {
+        'ylabel': '动能',
+        'log_scale': False
+    }
+}
+
+
+def load_metrics_data(file_path: Path) -> Dict[str, Any]:
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[ERROR] Failed to load {file_path}: {e}")
+        return None
+
+
+def plot_comparison(json_files: List[Path], labels: List[str], scene_id: str, metric: str, output_path: Path) -> None:
+    setup_plot_style()
+
+    if metric not in METRIC_CONFIG:
+        print(f"[ERROR] Invalid metric '{metric}'")
+        return
+
+    config = METRIC_CONFIG[metric]
+
+    fig, ax = plt.subplots()
+    avg_results = []
+
+    print(f"[INFO] 生成场景 {scene_id} 的 {metric} 对比图...")
+
+    for i, file_path in enumerate(json_files):
+        model_data = load_metrics_data(file_path)
+        if not model_data:
+            continue
+
+        if scene_id not in model_data:
+            print(f"[WARNING] 场景 {scene_id} 未在 {file_path} 中找到")
+            continue
+
+        scene_metrics = model_data[scene_id]
+        timestamps = scene_metrics.get('timestamps')
+        label = labels[i]
+
+        color = COLORS[i % len(COLORS)]
+        linestyle = LINESTYLES[i % len(LINESTYLES)]
+
+        current_mean = None
+
+        if metric == 'kinetic_energy':
+            ke_pred = np.array(scene_metrics.get('kinetic_energy_pred'))
+            ke_gt = np.array(scene_metrics.get('kinetic_energy_gt'))
+
+            # GT（只画一次）
+            if i == 0:
+                ax.plot(timestamps, ke_gt, color='black', linestyle=':', label='基准值')
+
+            # 每个模型预测
+            ax.plot(timestamps, ke_pred, label=label, color=color, linestyle=linestyle)
+
+            # ===== 相对误差（带保护）=====
+            eps = 1e5  # 根据数据范围调整这个值，确保不会过度放大小值的误差
+            denom = np.maximum(np.abs(ke_gt), eps)
+            rel_error = np.abs(ke_pred - ke_gt) / denom
+
+            # ===== 用中位数 =====
+            current_mean = np.median(rel_error)
+
+        elif metric == 'mass_drift_per_phase':
+            values = np.array(scene_metrics.get(metric))
+
+            # ✅ 单相绝对值
+            single_phase_abs = np.abs(values[:, 0])
+            print(single_phase_abs[:10])  # 打印前10个单相绝对值，检查数据
+
+            ax.plot(timestamps, single_phase_abs, label=label, color=color, linestyle=linestyle)
+            current_mean = np.mean(single_phase_abs)
+
+        else:
+            metric_values = scene_metrics.get(metric)
+
+            print(metric_values[:10])  # 打印前10个指标值，检查数据
+            ax.plot(timestamps, metric_values, label=label, color=color, linestyle=linestyle)
+            current_mean = np.mean(metric_values)
+
+        if current_mean is not None:
+            avg_results.append((label, current_mean))
+
+    # ===== 打印平均值 =====
+    print("\n" + "="*50)
+    print(f"📊 场景【{scene_id}】- 指标【{config['ylabel']}】平均值对比")
+    print("="*50)
+    for lbl, mean_val in avg_results:
+        print(f"{lbl}: {mean_val:.6f}")
+    print("="*50 + "\n")
+
+    # ===== 图表设置（全部强制字体）=====
+    ax.set_xlabel('时间步 (frame)', fontproperties=font_prop)
+    ax.set_ylabel(config['ylabel'], fontproperties=font_prop)
+
+    if config.get('log_scale'):
+        ax.set_yscale('log')
+
+    if 'formatter' in config:
+        ax.yaxis.set_major_formatter(config['formatter'])
+
+    # legend 也必须指定字体
+    ax.legend(frameon=False, prop=font_prop)
+
+    plt.savefig(output_path)
+    plt.close(fig)
+
+    print(f"[SUCCESS] 图像已保存: {output_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("json_files", nargs='+', type=Path)
+    parser.add_argument("--labels", nargs='+', required=True)
+    parser.add_argument("--scene_id", required=True)
+    parser.add_argument("--metric", required=True, choices=list(METRIC_CONFIG.keys()))
+    parser.add_argument("--output", type=Path)
+
+    args = parser.parse_args()
+
+    if len(args.json_files) != len(args.labels):
+        print("[ERROR] 文件数量与标签数量不一致")
+        sys.exit(1)
+
+    if args.output is None:
+        output_dir = Path("comparison_plots")
+        output_dir.mkdir(exist_ok=True)
+        args.output = output_dir / f"{args.scene_id}_{args.metric}.png"
+
+    plot_comparison(args.json_files, args.labels, args.scene_id, args.metric, args.output)
+
+
+if __name__ == '__main__':
+    main()
