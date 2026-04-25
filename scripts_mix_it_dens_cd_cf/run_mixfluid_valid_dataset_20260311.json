@@ -1,5 +1,6 @@
 {
     "h5_path.bak1": "/workspace/xyh_synology/graduate/datasets/mix-20260311/valid/cd_0.61_cf_0.3_density_1000_1000.h5",
+    "h5_path.bak2": "/workspace/xyh_synology/graduate/datasets/mix-20260311/valid/cd_1.0_cf_0.3_density_1000_1000.h5",
     "h5_path": "/workspace/xyh_synology/graduate/datasets/mix-20260311/valid/cd_0.0_cf_1.0_density_1000_1000.h5",
     "walls": [
         {

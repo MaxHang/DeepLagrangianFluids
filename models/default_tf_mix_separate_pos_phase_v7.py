@@ -20,7 +20,7 @@ import tensorflow as tf
 import open3d.ml.tf as ml3d
 import numpy as np
 from typing import Tuple, List, Optional
-from models.deepset_encoder_v3 import DeepSetPhaseEncoder
+from models.deepset_encoder_v2 import DeepSetPhaseEncoder
 
 
 class MultiPhaseParticleNetwork(tf.keras.Model):
@@ -53,7 +53,14 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
                  coordinate_mapping: str = 'ball_to_cube_volume_preserving',
                  interpolation: str = 'linear',
                  use_window: bool = True,
-                 # 更新权重
+                 # VF 预测模式
+                 # False（默认）= 直接预测：网络每步输出绝对 VF logits → softmax
+                 #   优点：无恒等先验，网络必须主动预测，不会出现 VF 不更新问题
+                 #   缺点：需要学习绝对 VF 分布，比残差稍难学
+                 # True = logit 空间残差：log(vf0) + alpha*delta → softmax
+                 #   优点：恒等先验，训练初期稳定
+                 #   缺点：delta→0 是有效最优解，可能导致 VF 怠性不更新
+                 vf_residual: bool = False,
                  alpha: float = 0.1,
                  ) -> None:
         super().__init__(name=type(self).__name__)
@@ -74,7 +81,8 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         self.coordinate_mapping = coordinate_mapping
         self.interpolation = interpolation
         self.use_window = use_window
-        self.alpha = alpha  # VF 更新的残差权重
+        self.vf_residual = vf_residual  # False=直接预测(推荐), True=logit空间残差
+        self.alpha = alpha              # Only used when vf_residual=True
 
         self._all_convs = []
 
@@ -196,23 +204,41 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
             current_phase_fractions, phase_densities, num_phases
         )
 
-        # 3. 构建粒子特征
-        fluid_feats = self._build_fluid_feats(pos2, vel2, phase_embedding, **kwargs)
+        # 3. cd/cf 编码一次，主干网络和 VF 头共用同一嵌入向量
+        #    这样 VF 头对 cd/cf 有直接的短路梯度路径，不需要穿越整个主干
+        cd_cf_emb = None
+        if self.cd_cf_as_input:
+            # 显式校验，不传直接抛异常
+            if 'cd' not in kwargs or 'cf' not in kwargs:
+                raise ValueError("cd, cf must be provided in kwargs when cd_cf_as_input is True")
+            # 严格必传：不传直接 KeyError 报错，程序停止
+            cd = tf.cast(kwargs['cd'], dtype=tf.float32)
+            cf = tf.cast(kwargs['cf'], dtype=tf.float32)
+            cond = tf.reshape(tf.stack([cd, cf]), (1, 2))
+            cd_cf_raw = self.cd_cf_encoder(cond)                        # [1, D]
+            cd_cf_emb = tf.tile(cd_cf_raw, [tf.shape(pos2)[0], 1])     # [N, D]
 
-        # 4. 主干网络
+        # 4. 构建粒子特征（主干网络用）
+        fluid_feats = self._build_fluid_feats(pos2, vel2, phase_embedding, cd_cf_emb)
+
+        # 5. 主干网络
         shared_features = self._backbone(fluid_feats, pos2, box_pos, box_feats)
 
-        # 5. 位置修正
+        # 6. 位置修正
         filter_extent = tf.constant(self.filter_extent)
         pos_correction = (1.0 / 128.0) * (
-            self.pos_conv(shared_features, pos2, pos2, filter_extent)
+            self.pos_conv(shared_features, pos2, pos2, filter_extent,
+                          user_neighbors_index=self._fluid_nns_index,
+                          user_neighbors_row_splits=self._fluid_nns_row_splits,
+                          user_neighbors_importance=self._fluid_nns_importance)
             + self.pos_dense(shared_features)
         )
         pos_final, vel_final = self.compute_new_pos_vel(pos1, vel1, pos2, vel2, pos_correction)
 
-        # 6. VF 逐相预测
+        # 7. VF 逐相预测（cd/cf_emb 直接注入，提供短路梯度路径）
         next_vf = self._predict_next_vf(
-            shared_features, per_phase_features, current_phase_fractions, num_phases, pos_final
+            shared_features, per_phase_features, current_phase_fractions, num_phases, pos_final,
+            cd_cf_emb=cd_cf_emb
         )
 
         return pos_final, vel_final, next_vf
@@ -258,20 +284,15 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
                            pos: tf.Tensor,
                            vel: tf.Tensor,
                            phase_embedding: tf.Tensor,
-                           **kwargs) -> tf.Tensor:
+                           cd_cf_emb: Optional[tf.Tensor] = None) -> tf.Tensor:
         """[N, 1 + 3 + 64 + cd_cf_dim]"""
         feats = [
             tf.ones_like(pos[:, 0:1]),  # [N, 1]
             vel,                         # [N, 3]
             phase_embedding,             # [N, 64]
         ]
-        if self.cd_cf_as_input:
-            cd = tf.cast(kwargs.get('cd', 0.5), dtype=tf.float32)
-            cf = tf.cast(kwargs.get('cf', 0.5), dtype=tf.float32)
-            cond = tf.reshape(tf.stack([cd, cf]), (1, 2))
-            cd_cf_emb = self.cd_cf_encoder(cond)                     # [1, D]
-            cd_cf_emb = tf.tile(cd_cf_emb, [tf.shape(pos)[0], 1])   # [N, D]
-            feats.append(cd_cf_emb)
+        if cd_cf_emb is not None:
+            feats.append(cd_cf_emb)      # [N, D]
         return tf.concat(feats, axis=-1)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -291,6 +312,12 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
             self.dense0_fluid(fluid_feats),
         ], axis=-1)
 
+        # 缓存 pos→pos 邻居搜索结果，后续所有 fluid-fluid 卷积（同一 filter_extent）复用，
+        # 避免重复 radius search（backbone 循环卷积 + pos_conv 共享此缓存）
+        self._fluid_nns_index = self.conv0_fluid.nns.neighbors_index
+        self._fluid_nns_row_splits = self.conv0_fluid.nns.neighbors_row_splits
+        self._fluid_nns_importance = self.conv0_fluid._conv_values['neighbors_importance']
+
         self.num_fluid_neighbors = ml3d.ops.reduce_subarrays_sum(
             tf.ones_like(self.conv0_fluid.nns.neighbors_index, dtype=tf.float32),
             self.conv0_fluid.nns.neighbors_row_splits,
@@ -299,7 +326,10 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         ans = [x]
         for conv, dense in zip(self.convs, self.denses):
             inp = tf.keras.activations.relu(ans[-1])
-            out = conv(inp, pos, pos, filter_extent) + dense(inp)
+            out = conv(inp, pos, pos, filter_extent,
+                       user_neighbors_index=self._fluid_nns_index,
+                       user_neighbors_row_splits=self._fluid_nns_row_splits,
+                       user_neighbors_importance=self._fluid_nns_importance) + dense(inp)
             if out.shape[-1] == ans[-1].shape[-1]:
                 out = out + ans[-1]
             ans.append(out)
@@ -315,42 +345,54 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
                          per_phase_features: tf.Tensor,
                          current_vf: tf.Tensor,
                          num_phases: tf.Tensor,
-                         pos: tf.Tensor) -> tf.Tensor:
+                         pos: tf.Tensor,
+                         cd_cf_emb: Optional[tf.Tensor] = None) -> tf.Tensor:
         """
-        逐相预测 delta_vf，权重在所有相之间共享。
+        逐相预测 VF 更新，权重在所有相之间共享。
 
-        步骤：
-          1. vf_context_conv 对 shared_features 做空间卷积，聚合邻域信息
-             → vf_spatial [N, C]（体现相分数的局部传播性）
-          2. vf_spatial [N, C] → 复制为 [N, num_phases, C]
-          3. 与 per_phase_features [N, num_phases, 2] 拼接
-             → per_phase_input [N, num_phases, C+2]
-          4. vf_per_phase_mlp 对最后一维操作（等同于逐相独立前向传播）
-             → [N, num_phases, 1] → squeeze → delta_vf [N, num_phases]
-          5. 残差更新 + ReLU + 归一化 → next_vf
+        两种模式（由 self.vf_residual 控制）：
+          直接预测（vf_residual=False，默认）：
+            vf_next = softmax(MLP_output)
+            网络每步必须显式预测完整 VF 分布，无法通过输出 0 敷衍，
+            能有效避免"VF 不更新"问题。
 
-        num_phases 可以是训练时未见过的值（如 3, 4），
-        因为 MLP 权重只依赖特征维度，与相数无关。
+          logit 空间残差（vf_residual=True）：
+            vf_next = softmax(log(vf0 + ε) + alpha * MLP_output)
+            恒等先验：MLP 输出为 0 时 vf_next = vf0，训练初期稳定，
+            但存在网络学到 delta→0 懒惰最优解的风险。
+
+        两种模式均满足 vf ≥ 0 且 Σvf = 1（softmax 保证），无 tanh 饱和。
+        cd/cf_emb 直接拼接，为混溶条件提供短路梯度路径。
         """
         filter_extent = tf.constant(self.filter_extent)
 
         # 空间卷积：让每个粒子感知邻域的相分数状态
         vf_spatial = self.vf_context_conv(shared_features, pos, pos, filter_extent)  # [N, C]
-
         vf_spatial_expanded = tf.tile(
-            tf.expand_dims(vf_spatial, axis=1),
-            [1, num_phases, 1],
+            tf.expand_dims(vf_spatial, axis=1), [1, num_phases, 1]
         )  # [N, num_phases, C]
 
-        per_phase_input = tf.concat([vf_spatial_expanded, per_phase_features], axis=-1)
-        # [N, num_phases, C+2]
+        # 拼接：局部空间特征 + 逐相特征 + cd/cf 条件（直接注入，短路路径）
+        parts = [vf_spatial_expanded, per_phase_features]  # [N, P, C+2]
+        if cd_cf_emb is not None:
+            cd_cf_expanded = tf.tile(
+                tf.expand_dims(cd_cf_emb, axis=1), [1, num_phases, 1]
+            )  # [N, P, D]
+            parts.append(cd_cf_expanded)
+        per_phase_input = tf.concat(parts, axis=-1)  # [N, P, C+2(+D)]
 
-        delta_vf = tf.squeeze(self.vf_per_phase_mlp(per_phase_input), axis=-1)
-        delta_vf = tf.keras.activations.tanh(delta_vf)  # [N, num_phases]
+        delta_logits = tf.squeeze(self.vf_per_phase_mlp(per_phase_input), axis=-1)  # [N, P]
 
-        vf_next = tf.keras.activations.relu(current_vf + self.alpha * delta_vf)
-        s = tf.maximum(tf.reduce_sum(vf_next, axis=-1, keepdims=True), 1e-8)
-        return vf_next / s
+        if self.vf_residual:
+            # logit 空间残差：log(vf0) + alpha * delta_logits → softmax
+            # 恒等先验：delta_logits=0 时 vf_next = vf0
+            # 风险：网络可能学到 delta→0 的怠性最优解（VF 几乎不更新）
+            vf_logits = tf.math.log(current_vf + 1e-8) + self.alpha * delta_logits
+        else:
+            # 直接预测：网络输出绝对 VF logits，无恒等先验
+            # 网络必须每步显式预测 VF 分布，不能通过 delta→0 敷衍
+            vf_logits = delta_logits
+        return tf.nn.softmax(vf_logits, axis=-1)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  辅助方法

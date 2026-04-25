@@ -1,6 +1,6 @@
 dataset_dir: "/workspace/xyh_synology/graduate/datasets/mix-20260311" # path to the dataset directory with 'train' and 'valid' subdirs.
 train_params:
-  max_iter: 10000
+  max_iter: 20000
   base_lr: 0.001
   batch_size: 32
 model:
@@ -10,13 +10,15 @@ model:
   # ========================== cd cf integration strategy ===============================
   cd_cf_as_input: true
   cd_cf_embedding_dim: 32
-  alpha: 10 # weight for vf put
+
+  vf_residual: true # whether to use vf_residual loss, default False
+  alpha: 0.1 # weight for vf_residual loss, default 0.1, only effective when vf_residual is True.
 loss_weights:
   pos: 1.0
-  vol: 1.0
+  vol: 5.0
   gamma: 0.5
   use_mass_conservation: false  # use mass conservation
   mass_conservation: 0.1       # mass conservation loss weight
 train_data:
   random_rotation: true # randomly rotate training data about the gravity axis.
-train_dir: "/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v6" # path to the directory where the model weights will be saved.
+train_dir: "/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v7" # path to the directory where the model weights will be saved.
