@@ -7,7 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from scripts.evaluate_mix_spearate_pos_phase_v1 import evaluate_tf as evaluate
 from utils.deeplearningutilities.tf import Trainer, MyCheckpointManager
 # from utils.deeplearningutilities.tf import Trainer, MyCheckpointManagerWithCache
-from models.default_tf_mix_separate_pos_phase_v7 import MultiPhaseParticleNetwork
+from models.default_tf_mix_separate_pos_phase_v8 import MultiPhaseParticleNetwork
 import tensorflow as tf
 from datetime import date, datetime
 import time

@@ -1,0 +1,77 @@
+{
+    "scene_properties": {
+        "num_phases": 3,
+        "density": [
+            1000.0,
+            1000.0,
+            1000.0
+        ],
+        "cd": 0.0,
+        "cf": 1.0
+    },
+    "walls": [
+        {
+            "path": "canyon_boundary.obj",
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/canyon_boundary_r0.05.ply",
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "invert_normals": true
+        }
+    ],
+    "fluids": [
+        {
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/canyon_emitter_r0.05.ply",
+            "phase": 0,
+            "velocity": [
+                0,
+                -1,
+                0
+            ],
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "start": 0,
+            "stop": 1000,
+            "step": 18
+        },
+        {
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/canyon_emitter_r0.05.ply",
+            "phase": 1,
+            "velocity": [
+                0,
+                -1,
+                0
+            ],
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "start": 6,
+            "stop": 1000,
+            "step": 18
+        },
+        {
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/canyon_emitter_r0.05.ply",
+            "phase": 2,
+            "velocity": [
+                0,
+                -1,
+                0
+            ],
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "start": 12,
+            "stop": 1000,
+            "step": 18
+        }
+    ]
+}

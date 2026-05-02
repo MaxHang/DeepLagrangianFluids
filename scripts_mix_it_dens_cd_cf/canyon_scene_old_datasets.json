@@ -1,11 +1,12 @@
 {
     "scene_properties": {
-        "num_phases": 2,
+        "num_phases": 3,
         "density": [
+            1000.0,
             1000.0,
             1000.0
         ],
-        "cd": 0.7,
+        "cd": 0.0,
         "cf": 1.0
     },
     "walls": [

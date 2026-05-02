@@ -4,22 +4,18 @@
 RUN_SCRIPT="scripts/run_mix_v7.py"
 TRAIN_SCRIPT="scripts/train_mix_v7.py"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
-LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v7_dataset_20260311_${DATE}.log"  # 定义日志文件名，包含日期和时间
-SCENE="scripts_mix_it_dens_cd_cf/run_mixfluid_valid_dataset_20260311.json"
-OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_dataset_20260311_${DATE}"
 # NUMSTEPS=2000
-NUMSTEPS=1500
+NUMSTEPS=2000
 GPU_ID="0"  # 默认使用GPU 0
 
 
+LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v7_dataset_20260111_box_3phase_scene_${DATE}.log"  # 定义日志文件名，包含日期和时间
+OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_dataset_20260111_box_3phase_scene_${DATE}"
+SCENE="scripts_mix_it_dens_cd_cf/box_scene_3phase_datasets_20260111.json"
+
 # 不带vf残差
-YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v7/20260424180303/training_config.yaml"
-WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v7/20260424180303/model_weights_2026_04_25.h5"
-
-
-# 带vf残差
-# YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v7/20260424180454/training_config.yaml"
-# WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v7/20260424180454/checkpoints/ckpt-14000.index"
+YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v7/20260425165521/training_config.yaml"
+WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v7/20260425165521/checkpoints/ckpt-46000.index"
 
 # 检查输入参数
 if [ "$#" -ge 1 ]; then
