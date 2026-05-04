@@ -24,6 +24,9 @@
             - 输出固定维度 max_num_phases，运行时截取前 current_num_phases 个
 
 
+- v12 相比 v11，只想训练脚本加了importance，以及loss_weights
+
+
 
 ## deepset encoder 演变记录
 - 初始

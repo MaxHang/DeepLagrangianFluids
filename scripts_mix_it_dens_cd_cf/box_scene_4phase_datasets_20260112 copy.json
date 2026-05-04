@@ -1,10 +1,11 @@
 {
     "scene_properties": {
-        "num_phases": 3,
+        "num_phases": 4,
         "density": [
             800.0,
-            1500.0,
-            2000.0
+            2000.0,
+            5000.0,
+            10000.0
         ],
         "cd": 1.0,
         "cf": 0.0
@@ -52,7 +53,7 @@
             ],
             "start": 0,
             "stop": 600,
-            "step": 20
+            "step": 10
         },
         {
             "ply_path": "/workspace/xyh_synology/graduate/mix_obj/canyon_emitter_r0.05_inBox_3.ply",
@@ -69,7 +70,24 @@
             ],
             "start": 0,
             "stop": 600,
-            "step": 30
+            "step": 10
+        },
+        {
+            "ply_path": "/workspace/xyh_synology/graduate/mix_obj/canyon_emitter_r0.05_inBox_4.ply",
+            "phase": 3,
+            "velocity": [
+                0,
+                0,
+                0
+            ],
+            "translation": [
+                0,
+                0,
+                0
+            ],
+            "start": 0,
+            "stop": 600,
+            "step": 10
         }
     ]
 }
