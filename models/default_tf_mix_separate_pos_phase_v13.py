@@ -28,7 +28,7 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
     数据驱动多相流体模拟网络。
 
     位置预测：DeepSet(vf+density) + ContinuousConv 主干 → 位置修正头
-    VF  预测：density-free VF 分支 + 逐相特征 → 权重共享 MLP → delta_vf → 守恒归一化
+    VF  预测：density-free VF 分支 + 逐相特征 → 按相共享 CConv → delta_vf/绝对 VF → 守恒归一化
 
     关键设计：VF 逐相预测器的权重在所有相之间共享，
     因此训练时用 2 相，推理时可直接泛化到任意相数，无需 max_num_phases。
@@ -54,12 +54,8 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
                  interpolation: str = 'linear',
                  use_window: bool = True,
                  # VF 预测模式
-                 # False（默认）= 直接预测：网络每步输出绝对 VF logits → softmax
-                 #   优点：无恒等先验，网络必须主动预测，不会出现 VF 不更新问题
-                 #   缺点：需要学习绝对 VF 分布，比残差稍难学
-                 # True = logit 空间残差：log(vf0) + alpha*delta → softmax
-                 #   优点：恒等先验，训练初期稳定
-                 #   缺点：delta→0 是有效最优解，可能导致 VF 怠性不更新
+                 # False（默认）= 直接预测：网络输出未归一化 VF，再经 ReLU + 归一化约束
+                 # True = 残差预测：网络输出 delta_vf，current_vf + alpha * delta_vf 后再归一化
                  vf_residual: bool = False,
                  alpha: float = 0.1,
                  vf_use_velocity: bool = False,
@@ -82,7 +78,7 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         self.coordinate_mapping = coordinate_mapping
         self.interpolation = interpolation
         self.use_window = use_window
-        self.vf_residual = vf_residual  # False=直接预测(推荐), True=logit空间残差
+        self.vf_residual = vf_residual  # False=直接预测, True=delta_vf 残差预测
         self.alpha = alpha              # Only used when vf_residual=True
         self.vf_use_velocity = vf_use_velocity
 
@@ -93,6 +89,9 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
 
         def Conv(name, filters, activation=None, **kwargs):
             window_fn = window_poly6 if self.use_window else None
+            radius_search_ignore_query_points = kwargs.pop(
+                'radius_search_ignore_query_points', True
+            )
             conv = ml3d.layers.ContinuousConv(
                 name=name,
                 filters=filters,
@@ -103,7 +102,7 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
                 coordinate_mapping=self.coordinate_mapping,
                 normalize=False,
                 window_function=window_fn,
-                radius_search_ignore_query_points=True,
+                radius_search_ignore_query_points=radius_search_ignore_query_points,
                 **kwargs,
             )
             self._all_convs.append((name, conv))
@@ -157,20 +156,16 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
         # 卷积聚合邻域 VF 状态，不再复用位置分支的 density-conditioned latent
         self.vf_context_conv = Conv('vf_context_conv', filters=layer_channels[-1])
 
-        # ── VF 逐相预测器（权重共享 MLP）───────────────────────────────────
-        # 输入: [N, num_phases, layer_channels[-1] + 1 (+ cd_cf_dim)]
-        #   layer_channels[-1]: VF 空间卷积输出（聚合了邻域相分数信息）
-        #   1: 归一化后的 vf_i（仅 VF，不含密度——密度只留在位置分支）
-        # 输出: [N, num_phases, 1] → squeeze → [N, num_phases]
-        #
-        # 同一 MLP 对所有相（所有粒子）权重共享，等同于逐相独立前向传播。
-        # 因此训练时 num_phases=2，推理时 num_phases=3/4/N 均可直接使用，
-        # 网络学到的是"如何根据全局状态预测单个相的变化"，与相总数无关。
-        self.vf_per_phase_mlp = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation='relu', name='vf_h1'),
-            tf.keras.layers.Dense(32, activation='relu', name='vf_h2'),
-            tf.keras.layers.Dense(1, name='vf_out'),
-        ], name='vf_per_phase_mlp')
+        # ── VF 逐相预测器（按相共享 CConv 头）──────────────────────────────
+        # 做法：把 [粒子, 相] 展平为 phase-wise 点云，并给不同相加固定位置偏移，
+        # 这样同一套 CConv 权重只会在“同相邻域”里聚合，等价于对每一相共享空间预测器。
+        # Dense 跳连保留局部自特征；CConv 提供真正的逐相空间传播。
+        self.vf_per_phase_conv = Conv(
+            'vf_per_phase_conv',
+            filters=1,
+            radius_search_ignore_query_points=False,
+        )
+        self.vf_per_phase_dense = tf.keras.layers.Dense(units=1, name='vf_per_phase_dense')
 
     # ─────────────────────────────────────────────────────────────────────────
     #  call
@@ -341,6 +336,46 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
             feats.insert(0, vel)        # [N, 3]
         return tf.concat(feats, axis=-1)
 
+    def _build_phasewise_positions(self,
+                                   pos: tf.Tensor,
+                                   num_phases: tf.Tensor) -> tf.Tensor:
+        """
+        将 [N, 3] 粒子坐标扩展为 [N * num_phases, 3] 的 phase-wise 坐标。
+
+        通过给不同相添加固定偏移，确保逐相 CConv 只在“同相粒子”之间做邻域聚合，
+        同时保持每一相内部的相对几何关系不变。
+        """
+        num_particles = tf.shape(pos)[0]
+        repeated_pos = tf.tile(tf.expand_dims(pos, axis=1), tf.stack([1, num_phases, 1]))
+        repeated_pos = tf.reshape(repeated_pos, [-1, 3])
+
+        phase_ids = tf.tile(tf.expand_dims(tf.range(num_phases), axis=0), tf.stack([num_particles, 1]))
+        phase_ids = tf.reshape(phase_ids, [-1])
+        phase_spacing = tf.cast(self.filter_extent * 4.0, dtype=pos.dtype)
+        phase_offsets = tf.cast(phase_ids, dtype=pos.dtype) * phase_spacing
+        phase_offsets = tf.stack([
+            phase_offsets,
+            tf.zeros_like(phase_offsets),
+            tf.zeros_like(phase_offsets),
+        ], axis=-1)
+
+        return repeated_pos + phase_offsets
+
+    def _normalize_phase_fractions(self,
+                                   vf_raw: tf.Tensor,
+                                   fallback_vf: tf.Tensor) -> tf.Tensor:
+        """
+        使用 ReLU + 逐粒子归一化约束 VF；若某粒子的整行被裁成 0，则回退到当前 VF。
+        """
+        vf_non_negative = tf.nn.relu(vf_raw)
+        vf_sum = tf.reduce_sum(vf_non_negative, axis=-1, keepdims=True)
+        vf_normalized = vf_non_negative / tf.maximum(vf_sum, 1e-8)
+
+        fallback_sum = tf.reduce_sum(fallback_vf, axis=-1, keepdims=True)
+        fallback_normalized = fallback_vf / tf.maximum(fallback_sum, 1e-8)
+
+        return tf.where(vf_sum > 1e-8, vf_normalized, fallback_normalized)
+
     # ─────────────────────────────────────────────────────────────────────────
     #  主干网络
     # ─────────────────────────────────────────────────────────────────────────
@@ -398,17 +433,13 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
 
         两种模式（由 self.vf_residual 控制）：
           直接预测（vf_residual=False，默认）：
-            vf_next = softmax(MLP_output)
-            网络每步必须显式预测完整 VF 分布，无法通过输出 0 敷衍，
-            能有效避免"VF 不更新"问题。
+            vf_next = normalize(relu(CConv_output))
 
-          logit 空间残差（vf_residual=True）：
-            vf_next = softmax(log(vf0 + ε) + alpha * MLP_output)
-            恒等先验：MLP 输出为 0 时 vf_next = vf0，训练初期稳定，
-            但存在网络学到 delta→0 懒惰最优解的风险。
+          残差预测（vf_residual=True）：
+            vf_next = normalize(relu(vf0 + alpha * delta_vf))
 
-        两种模式均满足 vf ≥ 0 且 Σvf = 1（softmax 保证），无 tanh 饱和。
-        VF 分支使用独立的 density-free 空间上下文，密度只通过位置更新后的邻域变化间接影响 VF。
+        两种模式均满足 vf ≥ 0 且 Σvf = 1（ReLU + 归一化保证）。
+        VF 分支使用独立的 density-free 空间上下文，密度只通过位置更新、速度变化与邻域重排间接影响 VF。
         cd/cf 仅在最终逐相决策层注入，避免把全局条件提前混入空间上下文卷积。
         """
         filter_extent = tf.constant(self.filter_extent)
@@ -430,18 +461,23 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
             parts.append(cd_cf_expanded)
         per_phase_input = tf.concat(parts, axis=-1)  # [N, P, C+1(+D)]
 
-        delta_logits = tf.squeeze(self.vf_per_phase_mlp(per_phase_input), axis=-1)  # [N, P]
+        flat_per_phase_input = tf.reshape(per_phase_input, [-1, per_phase_input.shape[-1]])
+        phasewise_pos = self._build_phasewise_positions(pos, num_phases)
+
+        phasewise_prediction = self.vf_per_phase_conv(
+            flat_per_phase_input, phasewise_pos, phasewise_pos, filter_extent
+        ) + self.vf_per_phase_dense(flat_per_phase_input)
+        phasewise_prediction = tf.reshape(
+            tf.squeeze(phasewise_prediction, axis=-1),
+            tf.shape(current_vf),
+        )
 
         if self.vf_residual:
-            # logit 空间残差：log(vf0) + alpha * delta_logits → softmax
-            # 恒等先验：delta_logits=0 时 vf_next = vf0
-            # 风险：网络可能学到 delta→0 的怠性最优解（VF 几乎不更新）
-            vf_logits = tf.math.log(current_vf + 1e-8) + self.alpha * delta_logits
+            vf_raw = current_vf + self.alpha * phasewise_prediction
         else:
-            # 直接预测：网络输出绝对 VF logits，无恒等先验
-            # 网络必须每步显式预测 VF 分布，不能通过 delta→0 敷衍
-            vf_logits = delta_logits
-        return tf.nn.softmax(vf_logits, axis=-1)
+            vf_raw = phasewise_prediction
+
+        return self._normalize_phase_fractions(vf_raw, current_vf)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  辅助方法

@@ -15,7 +15,8 @@ SCENE="scripts_mix_it_dens_cd_cf/box_scene_4phase_datasets_20260112.json"
 
 # vf 不带 vel特征
 YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/training_config.yaml"
-WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/checkpoints/ckpt-10000.index"
+WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/model_20260512.h5"
+# WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/checkpoints/ckpt-24000.index"
 
 
 # 检查输入参数

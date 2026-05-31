@@ -8,14 +8,13 @@ DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMD
 NUMSTEPS=2000
 GPU_ID="0"  # 默认使用GPU 0
 
-
-LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v11_dataset_20260112_box_3phase_scene_${DATE}.log"  # 定义日志文件名，包含日期和时间
-OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_v11_dataset_20260112_box_3phase_scene_${DATE}"
-SCENE="scripts_mix_it_dens_cd_cf/box_scene_3phase_datasets_20260112.json"
+LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v11_dataset_20260112_only_mix_box_3phase_scene_${DATE}.log"  # 定义日志文件名，包含日期和时间
+OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_v11_dataset_20260112_only_mix_box_3phase_scene_${DATE}"
+SCENE="scripts_mix_it_dens_cd_cf/box_scene_3phase_datasets_20260112_only_mix.json"
 
 # vf 不带 vel特征
-YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/training_config.yaml"
-WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/checkpoints/ckpt-24000.index"
+YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260513125304/training_config.yaml"
+WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260513125304/model_20260516.h5"
 
 
 # 检查输入参数

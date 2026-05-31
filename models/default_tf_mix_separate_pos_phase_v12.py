@@ -20,7 +20,7 @@ import tensorflow as tf
 import open3d.ml.tf as ml3d
 import numpy as np
 from typing import Tuple, List, Optional
-from models.deepset_encoder_v2 import DeepSetPhaseEncoder
+from models.deepset_encoder_v3 import DeepSetPhaseEncoder
 
 
 class MultiPhaseParticleNetwork(tf.keras.Model):
@@ -116,6 +116,7 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
             phi_dims=[64, 128],
             rho_dims=[128, 64],
             aggregation=self.aggregation,
+            name='phase_encoder'
         )
 
         # ── VF 分支专用 DeepSet 编码器（仅看 VF，不看密度）──────────────────────
@@ -125,6 +126,7 @@ class MultiPhaseParticleNetwork(tf.keras.Model):
             phi_dims=[64, 128],
             rho_dims=[128, 64],
             aggregation=self.aggregation,
+            name='vf_phase_encoder'
         )
 
         # ── cd/cf 条件编码器 ────────────────────────────────────────────────

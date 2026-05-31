@@ -21,7 +21,6 @@ import shutil
 _k = 1000
 
 TrainParams = namedtuple('TrainParams', ['max_iter', 'base_lr', 'batch_size'])
-# train_params = TrainParams(50 * _k, 0.001, 16)
 train_params = TrainParams(50 * _k, 0.001, 64)
 
 
@@ -63,13 +62,20 @@ def main():
     with open(args.cfg, 'r', encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
 
+    global train_params, _k
+    train_params = train_params._replace(**cfg.get('train_params', {}))
+    _k = train_params.max_iter // 50
+
     if '2025' not in cfg['train_dir'] and '2026' not in cfg['train_dir']:      # 如果没有指定日期，则使用当前日期
-        # train_dir = os.path.join(cfg['train_dir'],  f"phases{max_phases}_zsg_{use_zero_sum_game}_centre{phase_feat_centralization}_{aggregation}" + date.today().strftime("_%Y%m%d"))
         train_dir = os.path.join(cfg['train_dir'], datetime.now().strftime("%Y%m%d%H%M%S"))
+        os.makedirs(train_dir, exist_ok=True)
+
+        cfg['train_dir'] = train_dir
+        with open(os.path.join(train_dir, 'training_config.yaml'), 'w') as f:
+            yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
     else:
         train_dir = cfg['train_dir']
 
-    train_dir = os.path.join(cfg['train_dir'], train_dir)
 
     print("train_dir: ", train_dir)  # eg. train_network_tf_6kbox
     print("cfg[train_dir]: ", cfg["train_dir"])  # eg. model_weights.h5

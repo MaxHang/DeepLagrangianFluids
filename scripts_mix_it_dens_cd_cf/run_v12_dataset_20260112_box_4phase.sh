@@ -1,21 +1,22 @@
 #!/bin/bash
 
 # 定义变量, 批量处理文件夹
-RUN_SCRIPT="scripts/run_mix_v11.py"
-TRAIN_SCRIPT="scripts/train_mix_v11.py"
+RUN_SCRIPT="scripts/run_mix_v12.py"
+TRAIN_SCRIPT="scripts/train_mix_v12.py"
 DATE=$(date +"%Y%m%d_%H%M%S")  # 获取当前日期和时间，格式为 YYYYMMDD_HHMMSS
 # NUMSTEPS=2000
 NUMSTEPS=2000
 GPU_ID="0"  # 默认使用GPU 0
 
 
-LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v11_dataset_20260112_box_3phase_scene_${DATE}.log"  # 定义日志文件名，包含日期和时间
-OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_v11_dataset_20260112_box_3phase_scene_${DATE}"
-SCENE="scripts_mix_it_dens_cd_cf/box_scene_3phase_datasets_20260112.json"
+LOG_FILE="scripts_mix_it_dens_cd_cf/log_run/run_v12_dataset_20260112_box_4phase_scene_${DATE}.log"  # 定义日志文件名，包含日期和时间
+OUTPUT="/workspace/xyh_synology/graduate/run_network/mix_fluid/ply_v12_dataset_20260112_box_4phase_scene_${DATE}"
+SCENE="scripts_mix_it_dens_cd_cf/box_scene_4phase_datasets_20260112.json"
 
 # vf 不带 vel特征
-YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/training_config.yaml"
-WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v11/20260503101333/checkpoints/ckpt-24000.index"
+YAML_FILE="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v12/20260504133243/training_config.yaml"
+WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v12/20260504133243/model_20260512.h5"
+# WEIGHTS="/workspace/xyh_synology/graduate/weights/mix_it_dens_cd_cf_separate_pos_phase_v12/20260504133243/checkpoints/ckpt-10000.index"
 
 
 # 检查输入参数
